@@ -12,7 +12,7 @@ const wr = (f, v) => fs.writeFileSync(path.join(ROOT, f), JSON.stringify(v));
 fs.mkdirSync(DATA, { recursive: true });
 
 const cfg = rd('config.json', {});
-const watches = rd('watches.json', []);
+let watches = rd('watches.json', []); // נטען מחדש מהמסד בתחילת הריצה
 const CITY = (c) => cfg.cities[c] || c;
 const AIR = { elal: 'El Al' };
 
@@ -91,7 +91,20 @@ async function scanOne(ctx, url) {
 const match = (w) => (x) => x.stops === 'Nonstop' && (!AIR[w.airline] || x.air.startsWith(AIR[w.airline]));
 const pick = (res, fn) => (res || []).find(fn) || null; // res ממוין לפי מחיר
 
+// הטיולים נשמרים במסד (Supabase) — מה שהוגדר באתר
+async function loadWatches() {
+  const sb = cfg.supabase;
+  if (!sb) return;
+  try {
+    const r = await fetch(`${sb.url}/rest/v1/rpc/flight_get_watches`, { method: 'POST', headers: { apikey: sb.key, 'Content-Type': 'application/json' }, body: '{}' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const w = await r.json();
+    if (Array.isArray(w)) { watches = w; wr('watches.json', w); }
+  } catch (e) { console.log('לא הצלחתי לטעון את הטיולים מהמסד, משתמש בקובץ:', e.message); }
+}
+
 (async () => {
+  await loadWatches();
   const now = new Date();
   const prev = rd('data/latest.json', {});
   const legsPrev = prev.legs || {};
@@ -146,11 +159,12 @@ const pick = (res, fn) => (res || []).find(fn) || null; // res ממוין לפי
     // התראה: מתחת ליעד (פעם ראשונה, או ירידה נוספת), או — בלי יעד — כל ירידה משמעותית
     const s = (state[w.id] = state[w.id] || {});
     const minDrop = cfg.alertMinDrop || 30;
-    if (w.target) {
-      if (price <= w.target) {
-        if (s.alerted == null || s.alerted - price >= minDrop) { alerts.push({ w, price, a, b, why: 'target' }); s.alerted = price; }
-      } else if (price > w.target + minDrop) s.alerted = null; // חזר מעל היעד — ההתראה הבאה תישלח שוב
-    } else if (s.last != null && s.last - price >= minDrop) alerts.push({ w, price, a, b, why: 'drop', from: s.last });
+    // התראה על כל ירידה (₪30 ומעלה) מאז הבדיקה הקודמת; ובנוסף — כשהמחיר עובר אל מתחת ליעד
+    const under = w.target && price <= w.target;
+    const firstUnder = under && !s.under;
+    if (firstUnder || (s.last != null && s.last - price >= minDrop))
+      alerts.push({ w, price, a, b, why: under ? 'target' : 'drop', from: s.last });
+    if (w.target) s.under = under ? true : price > w.target + minDrop ? false : s.under;
     s.last = price;
   }
   for (const id of Object.keys(state)) if (!watches.find((w) => w.id === id)) delete state[id];
@@ -172,7 +186,8 @@ function message(alerts) {
   for (const { w, price, a, b, why, from } of alerts) {
     const air = AIR[w.airline] ? 'אל על' : 'טיסה ישירה';
     L.push(`🔔 ${CITY(w.city)} — ${air}`);
-    L.push(why === 'target' ? `המחיר ירד ל-${ils(price)} — מתחת ליעד שלך (${ils(w.target)})!` : `המחיר ירד מ-${ils(from)} ל-${ils(price)}`);
+    L.push(from != null ? `המחיר ירד מ-${ils(from)} ל-${ils(price)}` : `המחיר עכשיו: ${ils(price)}`);
+    if (why === 'target') L.push(`✅ מתחת למחיר שקבעת (${ils(w.target)})!`);
     L.push(`🛫 הלוך ${he(w.out)}, ${a.dep} (${a.air}) — ${ils(a.price)}`);
     L.push(`🛬 חזור ${he(w.back)}, ${b.dep} (${b.air}) — ${ils(b.price)}`);
     L.push('');

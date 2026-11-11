@@ -1,7 +1,7 @@
 name: מעקב מחירים
 on:
   schedule:
-    - cron: "17 * * * *"   # כל שעה
+    - cron: "7,37 * * * *"   # כל חצי שעה
   workflow_dispatch:
     inputs:
       test_notify:

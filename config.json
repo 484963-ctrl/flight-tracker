@@ -1,6 +1,20 @@
 {
-  "origin": "TLV",
-  "cities": { "MUC": "מינכן", "ZRH": "ציריך", "MXP": "מילאנו" },
-  "alertMinDrop": 30,
-  "overview": { "on": true, "outFrom": "2027-08-15", "outTo": "2027-08-31", "backFrom": "2027-08-16", "backTo": "2027-09-02" }
+ "origin": "TLV",
+ "cities": {
+  "MUC": "מינכן",
+  "ZRH": "ציריך",
+  "MXP": "מילאנו"
+ },
+ "alertMinDrop": 30,
+ "overview": {
+  "on": true,
+  "outFrom": "2027-08-15",
+  "outTo": "2027-08-31",
+  "backFrom": "2027-08-16",
+  "backTo": "2027-09-02"
+ },
+ "supabase": {
+  "url": "https://opepjcatbfwtpymnnnvl.supabase.co",
+  "key": "sb_publishable_VF-Lyt6W_swwEcu0ESMQvw_5bPickuL"
+ }
 }

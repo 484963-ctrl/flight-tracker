@@ -69,25 +69,16 @@
       <div class="sub" id="upd">טוען…</div>
     </div>
     <div>
-      <button id="btnNow" class="pri" style="display:none">🔄 לבדוק עכשיו</button>
-      <button id="btnKey">🔑 חיבור לעריכה</button>
+      <button id="btnKey">🔑 כניסה לעריכה</button>
     </div>
   </header>
 
   <div class="box" id="keyBox" style="display:none">
-    <b>חיבור לעריכה (פעם אחת בכל מכשיר)</b>
-    <div class="note" style="margin-top:6px">
-      כדי שהדף יוכל לשמור טיולים, צריך "מפתח" מ-GitHub:<br>
-      1. נכנסים ל-<a href="https://github.com/settings/personal-access-tokens/new" target="_blank">github.com/settings/personal-access-tokens/new</a><br>
-      2. <b>Token name</b> (שם): <code>flights</code> · <b>Expiration</b> (תוקף): <b>No expiration</b> או שנה<br>
-      3. <b>Repository access</b> (גישה למאגרים) ← <b>Only select repositories</b> ← <code id="repoName">flight-tracker</code><br>
-      4. <b>Permissions</b> (הרשאות) ← <b>Contents</b>: <b>Read and write</b>, וגם <b>Actions</b>: <b>Read and write</b><br>
-      5. <b>Generate token</b> (יצירה), מעתיקים ומדביקים כאן:
-    </div>
-    <div class="form" style="margin-top:8px">
-      <label style="flex:1">המפתח<input id="tok" type="password" placeholder="github_pat_…" style="width:100%"></label>
-      <button class="pri" id="saveTok">שמירה</button>
-      <button id="delTok">ניתוק</button>
+    <b style="font-size:18px">🔑 כניסה לעריכה</b>
+    <div class="form" style="margin-top:10px">
+      <label>הקוד שלך<input id="tok" type="password" autocomplete="current-password" style="width:200px"></label>
+      <button class="pri" id="saveTok">כניסה</button>
+      <button id="delTok">יציאה</button>
     </div>
     <div class="msg" id="tokMsg"></div>
   </div>
@@ -119,7 +110,7 @@
 
   <div class="note">
     המחיר הוא הלוך + חזור, טיסות ישירות, למבוגר אחד, במחלקת תיירים, כפי שמופיע ב-Google Flights (ייתכן שבלי מזוודה).
-    המחירים נבדקים כל שעה בערך. לפני הזמנה — בודקים את המחיר הסופי באתר של החברה.
+    המחירים נבדקים כל חצי שעה בערך. לפני הזמנה — בודקים את המחיר הסופי באתר של החברה.
   </div>
 </div>
 
@@ -133,40 +124,26 @@ const nights = (a, b) => Math.round((new Date(b) - new Date(a)) / 864e5);
 const ago = (t) => { const m = Math.round((Date.now() - new Date(t)) / 6e4); return m < 1 ? 'עכשיו' : m < 60 ? `לפני ${m} דק׳` : m < 1440 ? `לפני ${Math.round(m / 60)} שעות` : `לפני ${Math.round(m / 1440)} ימים`; };
 const ltr = (s) => `<bdi dir="ltr">${s}</bdi>`;
 
-// --- איפה המאגר: <owner>.github.io/<repo>/ ---
-const OWNER = location.hostname.endsWith('.github.io') ? location.hostname.split('.')[0] : null;
-const REPO = OWNER ? (location.pathname.split('/')[1] || `${OWNER}.github.io`) : null;
-const API = OWNER ? `https://api.github.com/repos/${OWNER}/${REPO}` : null;
-const TOKKEY = 'flights-token';
-const tok = () => { try { return localStorage.getItem(TOKKEY) || ''; } catch { return ''; } };
+// --- הטיולים נשמרים במסד (Supabase); הכניסה לעריכה בקוד ---
+const CODEKEY = 'flights-code';
+const code = () => { try { return localStorage.getItem(CODEKEY) || ''; } catch { return ''; } };
+const setCode = (v) => { try { v ? localStorage.setItem(CODEKEY, v) : localStorage.removeItem(CODEKEY); } catch {} };
+async function rpc(fn, body) {
+  const sb = CFG.supabase;
+  const r = await fetch(`${sb.url}/rest/v1/rpc/${fn}`, { method: 'POST', headers: { apikey: sb.key, 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+  if (!r.ok) throw new Error('אין חיבור לשרת, נסו שוב (' + r.status + ')');
+  return r.json();
+}
 
 async function getFile(p, fallback) {
-  try {
-    if (API && tok()) {
-      const h = { Accept: 'application/vnd.github.raw', Authorization: 'Bearer ' + tok() };
-      const r = await fetch(`${API}/contents/${p}?t=${Date.now()}`, { headers: h, cache: 'no-store' });
-      if (r.ok) return await r.json();
-    }
-    const r = await fetch(`${p}?t=${Date.now()}`, { cache: 'no-store' });
-    return r.ok ? await r.json() : fallback;
-  } catch { return fallback; }
+  try { const r = await fetch(`${p}?t=${Date.now()}`, { cache: 'no-store' }); return r.ok ? await r.json() : fallback; }
+  catch { return fallback; }
 }
-
-async function gh(method, url, body) {
-  const r = await fetch(API + url, { method, headers: { Authorization: 'Bearer ' + tok(), Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) });
-  if (!r.ok) throw new Error(r.status === 401 ? 'המפתח לא תקין' : r.status === 403 || r.status === 404 ? 'למפתח אין הרשאה (צריך Contents ו-Actions: Read and write)' : 'שגיאה ' + r.status);
-  return r.status === 204 ? null : r.json();
-}
-const b64 = (s) => btoa(unescape(encodeURIComponent(s)));
 
 async function saveWatches(list) {
-  const cur = await gh('GET', '/contents/watches.json');
-  await gh('PUT', '/contents/watches.json', { message: 'עדכון הטיולים', content: b64(JSON.stringify(list, null, 1) + '\n'), sha: cur.sha });
+  const ok = await rpc('flight_save_watches', { pass: code(), data: list });
+  if (!ok) { setCode(''); render(); throw new Error('הקוד לא נכון — צריך להיכנס שוב'); }
   W = list;
-  await runNow();
-}
-async function runNow() {
-  await gh('POST', '/actions/workflows/track.yml/dispatches', { ref: 'main' });
   pending = Date.now();
   render();
 }
@@ -174,18 +151,18 @@ async function runNow() {
 let CFG = {}, W = [], L = {}, WH = {}, pending = 0, ovCity = null, confirmDel = null, editT = null;
 
 async function load() {
-  [CFG, W, L, WH] = await Promise.all([getFile('config.json', {}), getFile('watches.json', []), getFile('data/latest.json', {}), getFile('data/watch-history.json', {})]);
+  [CFG, L, WH] = await Promise.all([getFile('config.json', {}), getFile('data/latest.json', {}), getFile('data/watch-history.json', {})]);
+  try { W = CFG.supabase ? await rpc('flight_get_watches') : await getFile('watches.json', []); } catch { W = await getFile('watches.json', []); }
   if (pending && L.updated && new Date(L.updated) > pending) pending = 0;
   render();
 }
 
 function render() {
-  const can = !!(API && tok());
-  $('#btnNow').style.display = can ? '' : 'none';
-  $('#btnKey').textContent = can ? '🔑 מחובר' : '🔑 חיבור לעריכה';
+  const can = !!code();
+  $('#btnKey').textContent = can ? '✓ במצב עריכה' : '🔑 כניסה לעריכה';
   $('#addBox').style.display = can ? '' : 'none';
   $('#upd').innerHTML = (L.updated ? `בדיקה אחרונה: ${ago(L.updated)} · ${new Date(L.updated).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}` : 'עוד אין בדיקות')
-    + (pending ? ' · <b>⏳ בודק עכשיו… (כ-3 דקות)</b>' : '');
+    + ' · נבדק כל חצי שעה';
   if (!$('#fCity').options.length && CFG.cities) {
     $('#fCity').innerHTML = Object.entries(CFG.cities).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
   }
@@ -213,7 +190,7 @@ function card(w, can) {
     : `<span class="badge wait">יעד ${ils(w.target)}</span>`;
   const status = price != null ? `<div class="price">${ils(price)}</div>`
     : r && r.none ? '<div class="price" style="font-size:20px;color:var(--red)">אין טיסה ישירה מתאימה בתאריכים האלה</div>'
-    : `<div class="price" style="font-size:20px;color:var(--mute)">${pending ? '⏳ בודק…' : 'עוד לא נבדק'}</div>`;
+    : `<div class="price" style="font-size:20px;color:var(--mute)">⏳ ייבדק בבדיקה הבאה (עד חצי שעה)</div>`;
   const leg = (lbl, d, x, url) => `<div>${lbl} ${dayName(d)} ${heD(d)}: ${x ? `<b>${ils(x.price)}</b> · ${ltr(x.dep)} · ${x.air}` : '—'}${url ? ` · <a href="${url}" target="_blank">לראות בגוגל</a>` : ''}</div>`;
   return `<div class="card ${hit ? 'hit' : ''}">
     <div class="city">${CFG.cities && CFG.cities[w.city] || w.city}</div>
@@ -314,28 +291,29 @@ $('#fAdd').onclick = async () => {
   m.className = 'msg'; m.textContent = 'שומר…';
   try {
     await saveWatches([...W, w]);
-    m.className = 'msg ok'; m.textContent = '✓ נוסף! המחיר יופיע בעוד כ-3 דקות.';
+    m.className = 'msg ok'; m.textContent = '✓ נוסף! המחיר יופיע תוך חצי שעה, ומאז תקבל עדכון על כל ירידה.';
     $('#fTarget').value = '';
   } catch (e) { m.className = 'msg err'; m.textContent = e.message; }
   $('#fAdd').disabled = false;
 };
 $('#fOut').onchange = () => { if (!$('#fBack').value || $('#fBack').value <= $('#fOut').value) { const d = new Date($('#fOut').value); d.setDate(d.getDate() + 7); $('#fBack').value = d.toISOString().slice(0, 10); } };
 
-// --- מפתח ---
-$('#btnKey').onclick = () => { const b = $('#keyBox'); b.style.display = b.style.display === 'none' ? '' : 'none'; if (REPO) $('#repoName').textContent = REPO; };
+// --- כניסה בקוד ---
+$('#btnKey').onclick = () => { const b = $('#keyBox'); b.style.display = b.style.display === 'none' ? '' : 'none'; };
 $('#saveTok').onclick = async () => {
-  const v = $('#tok').value.trim(); const m = $('#tokMsg');
-  if (!API) { m.className = 'msg err'; m.textContent = 'החיבור עובד רק בכתובת של הדף ב-github.io'; return; }
-  localStorage.setItem(TOKKEY, v);
-  try { await gh('GET', '/contents/watches.json'); m.className = 'msg ok'; m.textContent = '✓ מחובר. אפשר להוסיף טיולים.'; $('#tok').value = ''; render(); }
-  catch (e) { localStorage.removeItem(TOKKEY); m.className = 'msg err'; m.textContent = e.message; }
+  const v = $('#tok').value.trim(), m = $('#tokMsg');
+  try {
+    if (!(await rpc('flight_check_pass', { pass: v }))) { m.className = 'msg err'; m.textContent = 'הקוד לא נכון.'; return; }
+    setCode(v); $('#tok').value = ''; m.className = 'msg ok'; m.textContent = '✓ נכנסת. אפשר להוסיף ולשנות טיולים.';
+    $('#keyBox').style.display = 'none'; render();
+  } catch (e) { m.className = 'msg err'; m.textContent = e.message; }
 };
-$('#delTok').onclick = () => { localStorage.removeItem(TOKKEY); $('#tokMsg').textContent = 'נותק.'; render(); };
-$('#btnNow').onclick = async () => { try { await runNow(); } catch (e) { alert(e.message); } };
+$('#tok').onkeydown = (e) => { if (e.key === 'Enter') $('#saveTok').click(); };
+$('#delTok').onclick = () => { setCode(''); $('#tokMsg').textContent = 'יצאת ממצב עריכה.'; render(); };
 
 load();
 let tick = 0;
-setInterval(() => { tick++; if (pending || tick % 5 === 0) load(); }, 60 * 1000);
+setInterval(() => { tick++; if (tick % 5 === 0) load(); }, 60 * 1000);
 </script>
 </body>
 </html>
