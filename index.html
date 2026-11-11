@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>✈️ הטיולים שלי — מעקב מחירים</title>
+<style>
+  :root { --bg:#f3f6fb; --card:#fff; --ink:#1b2333; --mute:#6b7488; --line:#e2e7f0;
+          --blue:#1a4fa0; --green:#0e8a4a; --greenbg:#e5f6ec; --red:#c0392b; --gold:#fff4cc; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Segoe UI", Arial, sans-serif; background:var(--bg); color:var(--ink); font-size:16px; }
+  .wrap { max-width:1100px; margin:0 auto; padding:0 16px 48px; }
+  header { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:18px 0 6px; }
+  h1 { margin:0; font-size:26px; }
+  .sub { color:var(--mute); font-size:14px; }
+  button { font:inherit; cursor:pointer; border-radius:10px; border:1px solid var(--line); background:#fff; padding:8px 14px; }
+  button.pri { background:var(--blue); color:#fff; border-color:var(--blue); font-weight:600; }
+  button.ghost { background:none; border:none; color:var(--blue); padding:4px 6px; }
+  button:disabled { opacity:.5; cursor:default; }
+  .box { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; margin-top:14px; }
+  .form { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; }
+  .form label { display:flex; flex-direction:column; gap:4px; font-size:14px; color:var(--mute); }
+  .form input, .form select { font:inherit; font-size:17px; padding:8px 10px; border:1px solid #cfd6e3; border-radius:10px; background:#fff; color:var(--ink); }
+  .form input[type=number] { width:130px; }
+  .msg { margin-top:10px; font-size:14px; }
+  .msg.err { color:var(--red); }
+  .msg.ok { color:var(--green); }
+  .cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:14px; margin-top:16px; }
+  .card { background:var(--card); border:2px solid var(--line); border-radius:18px; padding:18px; position:relative; }
+  .card.hit { border-color:var(--green); background:linear-gradient(#fff, var(--greenbg)); }
+  .city { font-size:24px; font-weight:700; }
+  .air { font-size:14px; color:var(--mute); }
+  .dates { margin-top:6px; font-size:16px; }
+  .price { font-size:46px; font-weight:800; color:var(--blue); margin:10px 0 2px; line-height:1.1; }
+  .card.hit .price { color:var(--green); }
+  .badge { display:inline-block; padding:5px 12px; border-radius:999px; font-size:15px; font-weight:600; }
+  .badge.hit { background:var(--green); color:#fff; }
+  .badge.wait { background:#eef1f7; color:var(--ink); }
+  .chg { font-size:15px; margin-top:8px; }
+  .dn { color:var(--green); font-weight:700; }
+  .up { color:var(--red); font-weight:700; }
+  .legs { margin-top:12px; border-top:1px solid var(--line); padding-top:10px; font-size:14px; line-height:1.9; }
+  .legs a { color:var(--blue); }
+  .low { font-size:14px; color:var(--mute); margin-top:6px; }
+  svg.sp { width:100%; height:60px; margin-top:8px; }
+  .tools { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; }
+  .confirm { background:#fff3f2; border:1px solid #f3c2bd; border-radius:10px; padding:8px; margin-top:8px; font-size:14px; }
+  .empty { text-align:center; color:var(--mute); padding:30px; }
+  details summary { cursor:pointer; font-weight:600; font-size:17px; }
+  .tabs { display:flex; gap:8px; margin:12px 0; flex-wrap:wrap; }
+  .tabs button.on { background:var(--blue); color:#fff; border-color:var(--blue); }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  table { width:100%; border-collapse:collapse; border:1px solid var(--line); }
+  th, td { padding:6px 4px; text-align:center; border-bottom:1px solid var(--line); font-size:14px; }
+  th { background:#eef2f9; }
+  td.best { background:var(--gold); font-weight:700; }
+  .sat td { color:#aaa; }
+  .small { font-size:12px; color:var(--mute); display:block; }
+  @media (max-width:760px) { .grid2 { grid-template-columns:1fr; } .price { font-size:40px; } }
+  .note { font-size:13px; color:var(--mute); margin-top:16px; line-height:1.7; }
+  code { background:#eef1f7; padding:1px 5px; border-radius:5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>✈️ הטיולים שלי</h1>
+      <div class="sub" id="upd">טוען…</div>
+    </div>
+    <div>
+      <button id="btnNow" class="pri" style="display:none">🔄 לבדוק עכשיו</button>
+      <button id="btnKey">🔑 חיבור לעריכה</button>
+    </div>
+  </header>
+
+  <div class="box" id="keyBox" style="display:none">
+    <b>חיבור לעריכה (פעם אחת בכל מכשיר)</b>
+    <div class="note" style="margin-top:6px">
+      כדי שהדף יוכל לשמור טיולים, צריך "מפתח" מ-GitHub:<br>
+      1. נכנסים ל-<a href="https://github.com/settings/personal-access-tokens/new" target="_blank">github.com/settings/personal-access-tokens/new</a><br>
+      2. <b>Token name</b> (שם): <code>flights</code> · <b>Expiration</b> (תוקף): <b>No expiration</b> או שנה<br>
+      3. <b>Repository access</b> (גישה למאגרים) ← <b>Only select repositories</b> ← <code id="repoName">flight-tracker</code><br>
+      4. <b>Permissions</b> (הרשאות) ← <b>Contents</b>: <b>Read and write</b>, וגם <b>Actions</b>: <b>Read and write</b><br>
+      5. <b>Generate token</b> (יצירה), מעתיקים ומדביקים כאן:
+    </div>
+    <div class="form" style="margin-top:8px">
+      <label style="flex:1">המפתח<input id="tok" type="password" placeholder="github_pat_…" style="width:100%"></label>
+      <button class="pri" id="saveTok">שמירה</button>
+      <button id="delTok">ניתוק</button>
+    </div>
+    <div class="msg" id="tokMsg"></div>
+  </div>
+
+  <div class="box" id="addBox">
+    <b style="font-size:18px">➕ טיול חדש למעקב</b>
+    <div class="form" style="margin-top:10px">
+      <label>לאן
+        <select id="fCity"></select>
+      </label>
+      <label>הלוך<input type="date" id="fOut"></label>
+      <label>חזור<input type="date" id="fBack"></label>
+      <label>חברה
+        <select id="fAir"><option value="elal">אל על (ישיר)</option><option value="any">כל החברות (ישיר)</option></select>
+      </label>
+      <label>להתריע מתחת ל-₪<input type="number" id="fTarget" min="0" step="10" placeholder="למשל 1800"></label>
+      <button class="pri" id="fAdd">הוספה</button>
+    </div>
+    <div class="msg" id="fMsg"></div>
+  </div>
+
+  <div class="cards" id="cards"></div>
+
+  <details class="box" id="ovBox">
+    <summary>📅 כל התאריכים — לעזרה בבחירת תאריכים (מתעדכן פעם ביום)</summary>
+    <div class="tabs" id="ovTabs"></div>
+    <div id="ov"></div>
+  </details>
+
+  <div class="note">
+    המחיר הוא הלוך + חזור, טיסות ישירות, למבוגר אחד, במחלקת תיירים, כפי שמופיע ב-Google Flights (ייתכן שבלי מזוודה).
+    המחירים נבדקים כל שעה בערך. לפני הזמנה — בודקים את המחיר הסופי באתר של החברה.
+  </div>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const DAY = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','שבת'];
+const dayName = (d) => { const w = new Date(d + 'T12:00:00Z').getUTCDay(); return w === 6 ? 'שבת' : 'יום ' + DAY[w]; };
+const heD = (d) => { const [, m, day] = d.split('-'); return `${+day}.${+m}`; };
+const ils = (n) => n == null ? '—' : '₪' + n.toLocaleString('en-US');
+const nights = (a, b) => Math.round((new Date(b) - new Date(a)) / 864e5);
+const ago = (t) => { const m = Math.round((Date.now() - new Date(t)) / 6e4); return m < 1 ? 'עכשיו' : m < 60 ? `לפני ${m} דק׳` : m < 1440 ? `לפני ${Math.round(m / 60)} שעות` : `לפני ${Math.round(m / 1440)} ימים`; };
+const ltr = (s) => `<bdi dir="ltr">${s}</bdi>`;
+
+// --- איפה המאגר: <owner>.github.io/<repo>/ ---
+const OWNER = location.hostname.endsWith('.github.io') ? location.hostname.split('.')[0] : null;
+const REPO = OWNER ? (location.pathname.split('/')[1] || `${OWNER}.github.io`) : null;
+const API = OWNER ? `https://api.github.com/repos/${OWNER}/${REPO}` : null;
+const TOKKEY = 'flights-token';
+const tok = () => { try { return localStorage.getItem(TOKKEY) || ''; } catch { return ''; } };
+
+async function getFile(p, fallback) {
+  try {
+    if (API && tok()) {
+      const h = { Accept: 'application/vnd.github.raw', Authorization: 'Bearer ' + tok() };
+      const r = await fetch(`${API}/contents/${p}?t=${Date.now()}`, { headers: h, cache: 'no-store' });
+      if (r.ok) return await r.json();
+    }
+    const r = await fetch(`${p}?t=${Date.now()}`, { cache: 'no-store' });
+    return r.ok ? await r.json() : fallback;
+  } catch { return fallback; }
+}
+
+async function gh(method, url, body) {
+  const r = await fetch(API + url, { method, headers: { Authorization: 'Bearer ' + tok(), Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) });
+  if (!r.ok) throw new Error(r.status === 401 ? 'המפתח לא תקין' : r.status === 403 || r.status === 404 ? 'למפתח אין הרשאה (צריך Contents ו-Actions: Read and write)' : 'שגיאה ' + r.status);
+  return r.status === 204 ? null : r.json();
+}
+const b64 = (s) => btoa(unescape(encodeURIComponent(s)));
+
+async function saveWatches(list) {
+  const cur = await gh('GET', '/contents/watches.json');
+  await gh('PUT', '/contents/watches.json', { message: 'עדכון הטיולים', content: b64(JSON.stringify(list, null, 1) + '\n'), sha: cur.sha });
+  W = list;
+  await runNow();
+}
+async function runNow() {
+  await gh('POST', '/actions/workflows/track.yml/dispatches', { ref: 'main' });
+  pending = Date.now();
+  render();
+}
+
+let CFG = {}, W = [], L = {}, WH = {}, pending = 0, ovCity = null, confirmDel = null, editT = null;
+
+async function load() {
+  [CFG, W, L, WH] = await Promise.all([getFile('config.json', {}), getFile('watches.json', []), getFile('data/latest.json', {}), getFile('data/watch-history.json', {})]);
+  if (pending && L.updated && new Date(L.updated) > pending) pending = 0;
+  render();
+}
+
+function render() {
+  const can = !!(API && tok());
+  $('#btnNow').style.display = can ? '' : 'none';
+  $('#btnKey').textContent = can ? '🔑 מחובר' : '🔑 חיבור לעריכה';
+  $('#addBox').style.display = can ? '' : 'none';
+  $('#upd').innerHTML = (L.updated ? `בדיקה אחרונה: ${ago(L.updated)} · ${new Date(L.updated).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}` : 'עוד אין בדיקות')
+    + (pending ? ' · <b>⏳ בודק עכשיו… (כ-3 דקות)</b>' : '');
+  if (!$('#fCity').options.length && CFG.cities) {
+    $('#fCity').innerHTML = Object.entries(CFG.cities).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+  }
+
+  const cards = W.map((w) => card(w, can)).join('');
+  $('#cards').innerHTML = cards || `<div class="box empty">עוד אין טיולים במעקב. ${can ? 'מוסיפים טיול למעלה.' : 'לוחצים "🔑 חיבור לעריכה" כדי להוסיף.'}</div>`;
+  bindCards();
+  renderOverview();
+}
+
+function card(w, can) {
+  const r = (L.watches || {})[w.id];
+  const h = (WH[w.id] || []);
+  const price = r ? r.price : null;
+  const hit = price != null && w.target && price <= w.target;
+  const prevP = h.length > 1 ? h[h.length - 2].price : null;
+  const low = h.length ? h.reduce((a, b) => b.price < a.price ? b : a) : null;
+  const air = w.airline === 'elal' ? 'אל על · טיסה ישירה' : 'כל החברות · טיסה ישירה';
+  let chg = '';
+  if (price != null && prevP != null && Math.abs(price - prevP) >= 5) chg = price < prevP ? `<span class="dn">▼ ירד ב-${ils(prevP - price)}</span> מהבדיקה הקודמת` : price > prevP ? `<span class="up">▲ עלה ב-${ils(price - prevP)}</span> מהבדיקה הקודמת` : 'ללא שינוי';
+  else if (price != null && h.length) chg = 'ללא שינוי';
+  const badge = !w.target ? '<span class="badge wait">בלי מחיר יעד — התראה על כל ירידה</span>'
+    : hit ? `<span class="badge hit">✅ מתחת ליעד (${ils(w.target)})</span>`
+    : price != null ? `<span class="badge wait">יעד ${ils(w.target)} · חסר עוד ${ils(price - w.target)}</span>`
+    : `<span class="badge wait">יעד ${ils(w.target)}</span>`;
+  const status = price != null ? `<div class="price">${ils(price)}</div>`
+    : r && r.none ? '<div class="price" style="font-size:20px;color:var(--red)">אין טיסה ישירה מתאימה בתאריכים האלה</div>'
+    : `<div class="price" style="font-size:20px;color:var(--mute)">${pending ? '⏳ בודק…' : 'עוד לא נבדק'}</div>`;
+  const leg = (lbl, d, x, url) => `<div>${lbl} ${dayName(d)} ${heD(d)}: ${x ? `<b>${ils(x.price)}</b> · ${ltr(x.dep)} · ${x.air}` : '—'}${url ? ` · <a href="${url}" target="_blank">לראות בגוגל</a>` : ''}</div>`;
+  return `<div class="card ${hit ? 'hit' : ''}">
+    <div class="city">${CFG.cities && CFG.cities[w.city] || w.city}</div>
+    <div class="air">${air}</div>
+    <div class="dates">${dayName(w.out)} ${heD(w.out)} ← ${dayName(w.back)} ${heD(w.back)} · ${nights(w.out, w.back)} לילות</div>
+    ${status}
+    ${badge}
+    <div class="chg">${chg}${r && r.stale ? ' · <span class="up">חלק מהמחיר מבדיקה קודמת</span>' : ''}</div>
+    ${low && h.length > 2 ? `<div class="low">הכי נמוך שראינו: <b>${ils(low.price)}</b> (${new Date(low.t).toLocaleDateString('he-IL')})</div>` : ''}
+    ${spark(h)}
+    <div class="legs">${leg('🛫 הלוך', w.out, r && r.out, r && r.outUrl)}${leg('🛬 חזור', w.back, r && r.back, r && r.backUrl)}</div>
+    ${can ? `<div class="tools">
+      <button class="ghost" data-edit="${w.id}">✎ מחיר יעד</button>
+      <button class="ghost" data-del="${w.id}">🗑 מחיקה</button></div>` : ''}
+    ${editT === w.id ? `<div class="form" style="margin-top:8px"><label>להתריע מתחת ל-₪<input type="number" id="eT" value="${w.target || ''}" step="10"></label><button class="pri" data-esave="${w.id}">שמירה</button><button data-ecancel>ביטול</button></div>` : ''}
+    ${confirmDel === w.id ? `<div class="confirm">למחוק את הטיול הזה מהמעקב? <button class="pri" style="background:var(--red);border-color:var(--red)" data-dyes="${w.id}">כן, למחוק</button> <button data-dno>לא</button></div>` : ''}
+  </div>`;
+}
+
+function spark(h) {
+  if (h.length < 3 || new Date(h[h.length - 1].t) - new Date(h[0].t) < 3 * 3600e3) return '<div class="low">📈 הגרף יופיע אחרי כמה שעות של מעקב</div>';
+  const v = h.map((x) => x.price), t = h.map((x) => +new Date(x.t));
+  const mn = Math.min(...v), mx = Math.max(...v), W_ = 300, H_ = 56;
+  const X = (i) => 4 + (W_ - 8) * (t[i] - t[0]) / Math.max(1, t[t.length - 1] - t[0]);
+  const Y = (y) => 5 + (H_ - 10) * (mx === mn ? .5 : (mx - y) / (mx - mn));
+  // מדרגות: המחיר נשאר עד שהשתנה
+  let d = `M${X(0)},${Y(v[0])}`;
+  for (let i = 1; i < v.length; i++) d += ` H${X(i).toFixed(1)} V${Y(v[i]).toFixed(1)}`;
+  d += ` H${W_ - 4}`;
+  return `<svg class="sp" viewBox="0 0 ${W_} ${H_}" preserveAspectRatio="none"><path d="${d}" fill="none" stroke="#1a4fa0" stroke-width="2.5"/></svg>`;
+}
+
+function bindCards() {
+  document.querySelectorAll('[data-del]').forEach((b) => b.onclick = () => { confirmDel = b.dataset.del; editT = null; render(); });
+  document.querySelectorAll('[data-dno]').forEach((b) => b.onclick = () => { confirmDel = null; render(); });
+  document.querySelectorAll('[data-dyes]').forEach((b) => b.onclick = async () => {
+    b.disabled = true;
+    try { confirmDel = null; await saveWatches(W.filter((w) => w.id !== b.dataset.dyes)); } catch (e) { alert(e.message); }
+  });
+  document.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => { editT = b.dataset.edit; confirmDel = null; render(); });
+  document.querySelectorAll('[data-ecancel]').forEach((b) => b.onclick = () => { editT = null; render(); });
+  document.querySelectorAll('[data-esave]').forEach((b) => b.onclick = async () => {
+    const t = +$('#eT').value || null;
+    b.disabled = true;
+    try { const list = W.map((w) => w.id === b.dataset.esave ? { ...w, target: t } : w); editT = null; await saveWatches(list); } catch (e) { alert(e.message); }
+  });
+}
+
+// --- סקירת כל התאריכים ---
+function renderOverview() {
+  const ov = CFG.overview, legs = L.legs || {};
+  if (!ov || !ov.on) { $('#ovBox').style.display = 'none'; return; }
+  const cities = Object.keys(CFG.cities || {});
+  ovCity = ovCity || cities[0];
+  $('#ovTabs').innerHTML = cities.map((c) => `<button data-ov="${c}" class="${c === ovCity ? 'on' : ''}">${CFG.cities[c]}</button>`).join('');
+  document.querySelectorAll('[data-ov]').forEach((b) => b.onclick = () => { ovCity = b.dataset.ov; renderOverview(); });
+  const days = (a, b) => { const o = []; for (let d = new Date(a + 'T12:00:00Z'); d <= new Date(b + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)) o.push(d.toISOString().slice(0, 10)); return o; };
+  const table = (from, to, list) => {
+    const rows = list.map((d) => { const r = legs[`${from}|${to}|${d}`]; const ns = r ? r.res.filter((x) => x.stops === 'Nonstop') : [];
+      return { d, url: r && r.url, el: ns.find((x) => x.air.startsWith('El Al')), any: ns[0] }; });
+    const mE = Math.min(...rows.filter((x) => x.el).map((x) => x.el.price)), mA = Math.min(...rows.filter((x) => x.any).map((x) => x.any.price));
+    return `<table><tr><th>תאריך</th><th>אל על</th><th>הכי זול ישיר</th></tr>${rows.map((x) => `<tr class="${new Date(x.d + 'T12:00:00Z').getUTCDay() === 6 ? 'sat' : ''}">
+      <td>${heD(x.d)}<span class="small">${dayName(x.d)}</span></td>
+      <td class="${x.el && x.el.price === mE ? 'best' : ''}">${x.el ? ils(x.el.price) + `<span class="small">${ltr(x.el.dep)}</span>` : '—'}</td>
+      <td class="${x.any && x.any.price === mA ? 'best' : ''}">${x.any ? ils(x.any.price) + `<span class="small">${x.any.air}</span>` : '—'}</td></tr>`).join('')}</table>`;
+  };
+  $('#ov').innerHTML = `<div class="grid2">
+    <div><b>🛫 הלוך</b>${table(CFG.origin, ovCity, days(ov.outFrom, ov.outTo))}</div>
+    <div><b>🛬 חזור</b>${table(ovCity, CFG.origin, days(ov.backFrom, ov.backTo))}</div></div>
+    <div class="note">רקע צהוב = הכי זול בטור. מחיר לכיוון אחד. ${L.overviewAt ? 'עודכן ' + ago(L.overviewAt) : ''}</div>`;
+}
+
+// --- טופס הוספה ---
+$('#fAdd').onclick = async () => {
+  const w = { id: 'w' + Date.now().toString(36), city: $('#fCity').value, out: $('#fOut').value, back: $('#fBack').value, airline: $('#fAir').value, target: +$('#fTarget').value || null };
+  const m = $('#fMsg');
+  m.className = 'msg err';
+  if (!w.out || !w.back) return m.textContent = 'צריך לבחור תאריך הלוך ותאריך חזור.';
+  if (w.back <= w.out) return m.textContent = 'תאריך החזור צריך להיות אחרי ההלוך.';
+  if (w.out < new Date().toISOString().slice(0, 10)) return m.textContent = 'תאריך ההלוך כבר עבר.';
+  if (W.find((x) => x.city === w.city && x.out === w.out && x.back === w.back && x.airline === w.airline)) return m.textContent = 'הטיול הזה כבר במעקב.';
+  $('#fAdd').disabled = true;
+  m.className = 'msg'; m.textContent = 'שומר…';
+  try {
+    await saveWatches([...W, w]);
+    m.className = 'msg ok'; m.textContent = '✓ נוסף! המחיר יופיע בעוד כ-3 דקות.';
+    $('#fTarget').value = '';
+  } catch (e) { m.className = 'msg err'; m.textContent = e.message; }
+  $('#fAdd').disabled = false;
+};
+$('#fOut').onchange = () => { if (!$('#fBack').value || $('#fBack').value <= $('#fOut').value) { const d = new Date($('#fOut').value); d.setDate(d.getDate() + 7); $('#fBack').value = d.toISOString().slice(0, 10); } };
+
+// --- מפתח ---
+$('#btnKey').onclick = () => { const b = $('#keyBox'); b.style.display = b.style.display === 'none' ? '' : 'none'; if (REPO) $('#repoName').textContent = REPO; };
+$('#saveTok').onclick = async () => {
+  const v = $('#tok').value.trim(); const m = $('#tokMsg');
+  if (!API) { m.className = 'msg err'; m.textContent = 'החיבור עובד רק בכתובת של הדף ב-github.io'; return; }
+  localStorage.setItem(TOKKEY, v);
+  try { await gh('GET', '/contents/watches.json'); m.className = 'msg ok'; m.textContent = '✓ מחובר. אפשר להוסיף טיולים.'; $('#tok').value = ''; render(); }
+  catch (e) { localStorage.removeItem(TOKKEY); m.className = 'msg err'; m.textContent = e.message; }
+};
+$('#delTok').onclick = () => { localStorage.removeItem(TOKKEY); $('#tokMsg').textContent = 'נותק.'; render(); };
+$('#btnNow').onclick = async () => { try { await runNow(); } catch (e) { alert(e.message); } };
+
+load();
+let tick = 0;
+setInterval(() => { tick++; if (pending || tick % 5 === 0) load(); }, 60 * 1000);
+</script>
+</body>
+</html>

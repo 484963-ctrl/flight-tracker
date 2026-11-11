@@ -1,0 +1,6 @@
+{
+  "name": "flight-tracker",
+  "private": true,
+  "scripts": { "scan": "node scan.js" },
+  "dependencies": { "nodemailer": "^6.9.0", "playwright": "^1.48.0" }
+}

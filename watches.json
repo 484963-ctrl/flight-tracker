@@ -1,0 +1,5 @@
+[
+ {"id":"w1","city":"ZRH","out":"2027-08-26","back":"2027-09-01","airline":"elal","target":1850},
+ {"id":"w2","city":"MXP","out":"2027-08-29","back":"2027-09-02","airline":"elal","target":1050},
+ {"id":"w3","city":"MUC","out":"2027-08-23","back":"2027-09-01","airline":"elal","target":2100}
+]

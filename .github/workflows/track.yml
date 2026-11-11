@@ -1,0 +1,42 @@
+name: מעקב מחירים
+on:
+  schedule:
+    - cron: "17 * * * *"   # כל שעה
+  workflow_dispatch:
+    inputs:
+      test_notify:
+        description: "לשלוח הודעת בדיקה לכל הערוצים"
+        type: boolean
+        default: false
+permissions:
+  contents: write
+concurrency: { group: scan, cancel-in-progress: false }
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: node scan.js
+        env:
+          TEST_NOTIFY: ${{ inputs.test_notify && '1' || '' }}
+          PAGE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          WHATSAPP_PHONE: ${{ secrets.WHATSAPP_PHONE }}
+          WHATSAPP_APIKEY: ${{ secrets.WHATSAPP_APIKEY }}
+          MAIL_USER: ${{ secrets.MAIL_USER }}
+          MAIL_PASS: ${{ secrets.MAIL_PASS }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+      - name: שמירת הנתונים
+        run: |
+          git config user.name "flight-bot"
+          git config user.email "flight-bot@users.noreply.github.com"
+          git add data
+          git diff --cached --quiet || git commit -m "עדכון מחירים"
+          git pull --rebase -X ours origin ${{ github.ref_name }} || true
+          git push
