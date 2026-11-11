@@ -226,9 +226,14 @@ function card(w, can) {
     ${spark(h)}
     <div class="legs">${leg('🛫 הלוך', w.out, r && r.out, r && r.outUrl)}${leg('🛬 חזור', w.back, r && r.back, r && r.backUrl)}</div>
     ${can ? `<div class="tools">
-      <button class="ghost" data-edit="${w.id}">✎ מחיר יעד</button>
+      <button class="ghost" data-edit="${w.id}">✎ עריכה (תאריכים ומחיר)</button>
       <button class="ghost" data-del="${w.id}">🗑 מחיקה</button></div>` : ''}
-    ${editT === w.id ? `<div class="form" style="margin-top:8px"><label>להתריע מתחת ל-₪<input type="number" id="eT" value="${w.target || ''}" step="10"></label><button class="pri" data-esave="${w.id}">שמירה</button><button data-ecancel>ביטול</button></div>` : ''}
+    ${editT === w.id ? `<div class="form" style="margin-top:8px">
+      <label>הלוך<input type="date" id="eO" value="${w.out}"></label>
+      <label>חזור<input type="date" id="eB" value="${w.back}"></label>
+      <label>להתריע מתחת ל-₪<input type="number" id="eT" value="${w.target || ''}" step="10"></label>
+      <button class="pri" data-esave="${w.id}">שמירה</button><button data-ecancel>ביטול</button></div>
+      <div class="msg err" id="eMsg"></div>` : ''}
     ${confirmDel === w.id ? `<div class="confirm">למחוק את הטיול הזה מהמעקב? <button class="pri" style="background:var(--red);border-color:var(--red)" data-dyes="${w.id}">כן, למחוק</button> <button data-dno>לא</button></div>` : ''}
   </div>`;
 }
@@ -256,9 +261,19 @@ function bindCards() {
   document.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => { editT = b.dataset.edit; confirmDel = null; render(); });
   document.querySelectorAll('[data-ecancel]').forEach((b) => b.onclick = () => { editT = null; render(); });
   document.querySelectorAll('[data-esave]').forEach((b) => b.onclick = async () => {
-    const t = +$('#eT').value || null;
+    const t = +$('#eT').value || null, o = $('#eO').value, bk = $('#eB').value;
+    if (!o || !bk) return $('#eMsg').textContent = 'צריך תאריך הלוך ותאריך חזור.';
+    if (bk <= o) return $('#eMsg').textContent = 'תאריך החזור צריך להיות אחרי ההלוך.';
     b.disabled = true;
-    try { const list = W.map((w) => w.id === b.dataset.esave ? { ...w, target: t } : w); editT = null; await saveWatches(list); } catch (e) { alert(e.message); }
+    try {
+      const list = W.map((w) => {
+        if (w.id !== b.dataset.esave) return w;
+        const moved = w.out !== o || w.back !== bk;
+        // תאריכים חדשים = טיול חדש: מתחילים מעקב (וגרף) מחדש
+        return { ...w, id: moved ? 'w' + Date.now().toString(36) : w.id, out: o, back: bk, target: t };
+      });
+      editT = null; await saveWatches(list);
+    } catch (e) { $('#eMsg').textContent = e.message; b.disabled = false; }
   });
 }
 
