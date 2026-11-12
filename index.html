@@ -244,7 +244,9 @@ function hoursSel(id, r) {
   return `<label>מ-<select id="${id}F"><option value="">כל שעה</option>${Array.from({ length: 24 }, (_, i) => `<option value="${i}" ${f === i ? 'selected' : ''}>${hh(i)}</option>`).join('')}</select></label>
     <label>עד<select id="${id}T"><option value="">כל שעה</option>${Array.from({ length: 24 }, (_, i) => i + 1).map((i) => `<option value="${i}" ${t === i ? 'selected' : ''}>${hh(i)}</option>`).join('')}</select></label>`;
 }
-const flexSel = (id, v) => `<label>גמישות<select id="${id}"><option value="0">בדיוק בתאריך</option>${[1, 2, 3].map((n) => `<option value="${n}" ${+v === n ? 'selected' : ''}>± ${n} ${n === 1 ? 'יום' : 'ימים'}</option>`).join('')}</select></label>`;
+const FLEX = [[0, 'בדיוק בתאריך'], [0.25, '± 6 שעות'], [0.5, '± 12 שעות'], [1, '± 1 יום'], [2, '± 2 ימים'], [3, '± 3 ימים']];
+const flexText = (v) => (FLEX.find((x) => x[0] === +v) || [0, `± ${v} ימים`])[1];
+const flexSel = (id, v) => `<label>גמישות<select id="${id}">${FLEX.map(([n, t]) => `<option value="${n}" ${(+v || 0) === n ? 'selected' : ''}>${t}</option>`).join('')}</select></label>`;
 function tripForm(p, w = {}) {
   const airs = w.id ? airsOf(w) : ['El Al'];
   return `<div class="tf">
@@ -276,7 +278,7 @@ function checkTrip(t) {
 }
 function optsText(w) {
   const o = [];
-  if (w.flexOut || w.flexBack) o.push(`גמיש: הלוך ±${w.flexOut || 0}, חזור ±${w.flexBack || 0} ימים`);
+  if (w.flexOut || w.flexBack) o.push(`גמיש: הלוך ${flexText(w.flexOut || 0)}, חזור ${flexText(w.flexBack || 0)}`);
   if (w.outHours) o.push(`המראה בהלוך ${hh(w.outHours[0])}–${hh(w.outHours[1])}`);
   if (w.backHours) o.push(`המראה בחזור ${hh(w.backHours[0])}–${hh(w.backHours[1])}`);
   return o.join(' · ');
