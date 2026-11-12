@@ -3,7 +3,12 @@
  "cities": {
   "MUC": "מינכן",
   "ZRH": "ציריך",
-  "MXP": "מילאנו"
+  "MXP": "מילאנו",
+  "VCE": "ונציה",
+  "INN": "אינסברוק",
+  "SZG": "זלצבורג",
+  "VIE": "וינה",
+  "BGY": "ברגמו (מילאנו)"
  },
  "alertMinDrop": 30,
  "overview": {
@@ -11,7 +16,12 @@
   "outFrom": "2027-08-15",
   "outTo": "2027-08-31",
   "backFrom": "2027-08-16",
-  "backTo": "2027-09-02"
+  "backTo": "2027-09-02",
+  "cities": [
+   "MUC",
+   "ZRH",
+   "MXP"
+  ]
  },
  "supabase": {
   "url": "https://opepjcatbfwtpymnnnvl.supabase.co",

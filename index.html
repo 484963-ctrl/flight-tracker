@@ -261,16 +261,19 @@ const baOf = (w, leg) => {
   return [d === 'after' ? 0 : f, d === 'before' ? 0 : f];
 };
 const flexSel = (id, [b, a]) => ['B', 'A'].map((k, i) => `<label>${i ? 'גמישות אחרי' : 'גמישות לפני'}<select id="${id}${k}">${FLEX.map(([n, t]) => `<option value="${n}" ${([b, a][i] || 0) === n ? 'selected' : ''}>${t}</option>`).join('')}</select></label>`).join('');
+const citiesOfW = (w) => (Array.isArray(w.cities) && w.cities.length ? w.cities : w.city ? [w.city] : []);
 function tripForm(p, w = {}) {
   const airs = w.id ? airsOf(w) : ['El Al'];
   return `<div class="tf">
     <div class="row">
-      ${p === 'f' ? `<label>לאן<select id="${p}City">${Object.entries(CFG.cities || {}).map(([k, v]) => `<option value="${k}" ${w.city === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>` : ''}
+
       ${(() => { const px = paxOf(w), sel = (id, v, from, to, lbl) => `<label>${lbl}<select id="${p}${id}">${Array.from({ length: to - from + 1 }, (_, i) => i + from).map((n) => `<option value="${n}" ${n === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>`;
         return sel('PA', px.adults, 1, 9, '🎫 מבוגרים (12+)') + sel('PC', px.children, 0, 8, 'ילדים (2–11)') + sel('PI', px.infants, 0, 4, 'תינוקות (עד 2)'); })()}
       <label>להתריע מתחת ל-₪ (לכל הנוסעים)<input type="number" id="${p}Target" min="0" step="10" placeholder="למשל 1800" value="${w.target || ''}"></label>
       <label class="chip" style="align-self:flex-end" title="לא טסים ולא נוחתים מ-3 שעות לפני השקיעה של ערב שבת/חג ועד 3 שעות אחרי צאת השבת (50 דקות אחרי השקיעה)"><input type="checkbox" id="${p}NoSh" ${w.noShabbat === false ? '' : 'checked'}> 🕯️ בלי טיסות בשבת וחג</label>
     </div>
+    <fieldset><legend>📍 לאן — אפשר לבחור כמה יעדים, והזול ייבחר</legend>
+      <div class="chips">${Object.entries(CFG.cities || {}).map(([k, v]) => `<label class="chip"><input type="checkbox" data-city="${p}" value="${k}" ${citiesOfW(w).includes(k) || (!w.id && !citiesOfW(w).length && k === 'MUC') ? 'checked' : ''}> ${v}</label>`).join('')}</div></fieldset>
     <fieldset><legend>🛫 הלוך</legend><div class="row">
       <label>תאריך<input type="date" id="${p}Out" value="${w.out || ''}"></label>${flexSel(p + 'FlexO', baOf(w, 'out'))}
       <span style="align-self:center;color:var(--mute);font-size:14px">שעת המראה:</span>${hoursSel(p + 'HO', w.outHours)}</div></fieldset>
@@ -286,9 +289,11 @@ function readTrip(p) {
   return { out: $(`#${p}Out`).value, back: $(`#${p}Back`).value, target: +$(`#${p}Target`).value || null,
     flexOutBefore: +$(`#${p}FlexOB`).value, flexOutAfter: +$(`#${p}FlexOA`).value, flexBackBefore: +$(`#${p}FlexBB`).value, flexBackAfter: +$(`#${p}FlexBA`).value, outHours: hrs(p + 'HO'), backHours: hrs(p + 'HB'),
     airlines: [...document.querySelectorAll(`[data-air="${p}"]:checked`)].map((x) => x.value), noShabbat: $(`#${p}NoSh`).checked,
-    pax: { adults: +$(`#${p}PA`).value, children: +$(`#${p}PC`).value, infants: +$(`#${p}PI`).value } };
+    pax: { adults: +$(`#${p}PA`).value, children: +$(`#${p}PC`).value, infants: +$(`#${p}PI`).value },
+    cities: [...document.querySelectorAll(`[data-city="${p}"]:checked`)].map((x) => x.value) };
 }
 function checkTrip(t) {
+  if (t.cities && !t.cities.length) return 'צריך לבחור לפחות יעד אחד.';
   if (!t.out || !t.back) return 'צריך לבחור תאריך הלוך ותאריך חזור.';
   if (t.back <= t.out) return 'תאריך החזור צריך להיות אחרי ההלוך.';
   if (t.pax && t.pax.infants > t.pax.adults) return 'לכל תינוק צריך מבוגר אחד לפחות.';
@@ -344,15 +349,21 @@ function card(w, can) {
     : r && r.none ? '<div class="price" style="font-size:20px;color:var(--red)">אין טיסה ישירה מתאימה בתאריכים האלה</div>'
     : `<div class="price" style="font-size:20px;color:var(--mute)">⏳ בודק עכשיו… המחיר יופיע תוך כמה דקות</div>`;
   const leg = (lbl, d, x) => `<div>${lbl} ${dayName(d)} ${heD(d)}: ${x ? `${x.price != null && !(r && r.rt) ? `<b>${ils(x.price)}</b>${pc > 1 ? ' לכולם' : ''}${usdTag(x.price)} · ` : ''}${ltr(x.dep)}${x.arr ? ' ← ' + ltr(x.arr) : ''} · ${x.air}` : '—'}</div>`;
-  const img = ['MUC', 'ZRH', 'MXP'].includes(w.city) ? w.city : 'other';
+  const cityNow = (r && r.city) || citiesOfW(w)[0];
+  const many = citiesOfW(w).length > 1;
+  const img = ['MUC', 'ZRH', 'MXP', 'VCE', 'INN', 'SZG', 'VIE', 'BGY'].includes(cityNow) ? cityNow : 'other';
+  const cname = (c) => (CFG.cities && CFG.cities[c]) || c;
+  const cityList = many ? `<div class="opts" style="margin:2px 0 4px">📍 ${(r && r.cities ? [...r.cities].sort((a, b) => (a.price ?? 1e9) - (b.price ?? 1e9)) : citiesOfW(w).map((c) => ({ city: c })))
+      .map((c) => `${c.city === cityNow && r && r.price != null ? '<b>' : ''}${cname(c.city)} ${c.price != null ? ils(pc > 1 ? Math.round(c.price / pc) : c.price) : c.none ? '—' : '⏳'}${c.city === cityNow && r && r.price != null ? '</b>' : ''}`).join(' · ')}${pc > 1 ? ' (לנוסע)' : ''}</div>` : '';
   return `<div class="card ${hit ? 'hit' : ''}">
     <div class="photo" style="background-image:url(img/${img}.jpg)">
       ${hit ? '<div class="ribbon">✅ מתחת ליעד!</div>' : ''}
-      <div class="cap"><div class="city">${CFG.cities && CFG.cities[w.city] || w.city}</div><div class="air">${air} · 🎫 ${paxText(px)}</div></div>
+      <div class="cap"><div class="city">${cname(cityNow)}${many ? `<span style="font-size:15px;font-weight:600"> · הכי זול מבין ${citiesOfW(w).length} יעדים</span>` : ''}</div><div class="air">${air} · 🎫 ${paxText(px)}</div></div>
     </div>
     <div class="cb">
     ${(() => { const o = (r && r.outDate) || w.out, b = (r && r.backDate) || w.back, flex = [...baOf(w, 'out'), ...baOf(w, 'back')].some(Boolean);
       return `<div class="dates">📅 ${flex && r && r.outDate ? 'הכי זול: ' : ''}${dayName(o)} ${heD(o)} ← ${dayName(b)} ${heD(b)} · ${nights(o, b)} לילות</div>
+      ${cityList}
       ${optsText(w) ? `<div class="opts">⚙️ ${optsText(w)}${flex ? ` · ביקשת ${heD(w.out)} ← ${heD(w.back)}` : ''}</div>` : ''}`; })()}
     ${status}
     ${badge}
@@ -364,7 +375,7 @@ function card(w, can) {
         ? `✅ נבדקו כל ${r.combos} הצירופים בטווח · הכי זול: ${dayName(r.outDate)} ${heD(r.outDate)} ← ${dayName(r.backDate)} ${heD(r.backDate)}`
         : r.grid === 'OK' ? `✅ נבדקו הצירופים הזולים בטווח (${r.combos} צירופים)` : `ℹ️ נבדקו חלק מהצירופים בטווח (טבלת התאריכים של גוגל לא נטענה הפעם)`}</div>` : ''}
       ${r && r.gridMin ? `<div class="opts" style="margin:0 0 6px">💡 בלי ההגבלות שלך (חברה, שעות, שבת) יש בטווח גם ב-${ils(r.gridMin)}${pc > 1 ? ' לכולם' : ''}</div>` : ''}${leg('🛫 הלוך', (r && r.outDate) || w.out, r && r.out)}${leg('🛬 חזור', (r && r.backDate) || w.back, r && r.back)}
-      <a class="gbtn" href="${gfRound((r && r.outDate) || w.out, (r && r.backDate) || w.back, CFG.origin || 'TLV', w.city, paxOf(w))}" target="_blank">🔎 לראות הלוך-חזור בגוגל טיסות</a></div>
+      <a class="gbtn" href="${gfRound((r && r.outDate) || w.out, (r && r.backDate) || w.back, CFG.origin || 'TLV', cityNow, paxOf(w))}" target="_blank">🔎 לראות הלוך-חזור בגוגל טיסות${many ? ' (' + cname(cityNow) + ')' : ''}</a></div>
     ${can ? `<div class="tools">
       <button class="ghost" data-edit="${w.id}">✎ עריכה</button>
       <button class="ghost" data-del="${w.id}">🗑 מחיקה</button></div>` : ''}
@@ -409,10 +420,10 @@ function bindCards() {
       const list = W.map((w) => {
         if (w.id !== b.dataset.esave) return w;
         const same = (k) => JSON.stringify(k === 'airlines' ? airsOf(w) : w[k] ?? null) === JSON.stringify(t[k] ?? null);
-        const moved = JSON.stringify(paxOf(w)) !== JSON.stringify(t.pax) || !['out', 'back', 'outHours', 'backHours', 'airlines'].every(same) || (w.noShabbat !== false) !== t.noShabbat || JSON.stringify([...baOf(w, 'out'), ...baOf(w, 'back')]) !== JSON.stringify([t.flexOutBefore, t.flexOutAfter, t.flexBackBefore, t.flexBackAfter]);
+        const moved = JSON.stringify(citiesOfW(w)) !== JSON.stringify(t.cities) || JSON.stringify(paxOf(w)) !== JSON.stringify(t.pax) || !['out', 'back', 'outHours', 'backHours', 'airlines'].every(same) || (w.noShabbat !== false) !== t.noShabbat || JSON.stringify([...baOf(w, 'out'), ...baOf(w, 'back')]) !== JSON.stringify([t.flexOutBefore, t.flexOutAfter, t.flexBackBefore, t.flexBackAfter]);
         // טיסות אחרות = טיול חדש: מתחילים מעקב (וגרף) מחדש
         const { airline, flexOut, flexBack, flexOutDir, flexBackDir, ...rest } = w;
-        return { ...rest, ...t, id: moved ? 'w' + Date.now().toString(36) : w.id };
+        return { ...rest, ...t, city: t.cities[0], id: moved ? 'w' + Date.now().toString(36) : w.id };
       });
       editT = null; await saveWatches(list);
     } catch (e) { $('#eMsg').textContent = e.message; b.disabled = false; }
@@ -426,7 +437,7 @@ function renderStats() {
   const hits = prices.filter((x) => x.w.target && x.p.price <= x.w.target).length;
   $('#stats').innerHTML = `
     <div class="stat"><b>${W.length}</b><span>טיולים במעקב</span></div>
-    ${best ? `<div class="stat"><b>${ils(Math.round(best.p.price / paxCount(paxOf(best.w))))}${usdTag(Math.round(best.p.price / paxCount(paxOf(best.w))))}</b><span>הכי זול${paxCount(paxOf(best.w)) > 1 ? ' לנוסע' : ''} · ${CFG.cities[best.w.city] || best.w.city}</span></div>` : ''}
+    ${best ? `<div class="stat"><b>${ils(Math.round(best.p.price / paxCount(paxOf(best.w))))}${usdTag(Math.round(best.p.price / paxCount(paxOf(best.w))))}</b><span>הכי זול${paxCount(paxOf(best.w)) > 1 ? ' לנוסע' : ''} · ${CFG.cities[best.p.city || best.w.city] || best.p.city || best.w.city}</span></div>` : ''}
     <div class="stat"><b>${hits}</b><span>מתחת למחיר שקבעת</span></div>`;
 }
 
@@ -471,7 +482,7 @@ $('#chTest').onclick = async () => {
 function renderOverview() {
   const ov = CFG.overview, legs = L.legs || {};
   if (!ov || !ov.on) { $('#ovBox').style.display = 'none'; return; }
-  const cities = Object.keys(CFG.cities || {});
+  const cities = ov.cities || Object.keys(CFG.cities || {});
   ovCity = ovCity || cities[0];
   $('#ovTabs').innerHTML = cities.map((c) => `<button data-ov="${c}" class="${c === ovCity ? 'on' : ''}">${CFG.cities[c]}</button>`).join('');
   document.querySelectorAll('[data-ov]').forEach((b) => b.onclick = () => { ovCity = b.dataset.ov; renderOverview(); });
@@ -496,13 +507,14 @@ function renderOverview() {
 
 // --- טופס הוספה ---
 $('#fAdd').onclick = async () => {
-  const w = { id: 'w' + Date.now().toString(36), city: $('#fCity').value, ...readTrip('f') };
+  const t0 = readTrip('f');
+  const w = { id: 'w' + Date.now().toString(36), ...t0, city: t0.cities[0] };
   const m = $('#fMsg');
   m.className = 'msg err';
   const err = checkTrip(w);
   if (err) return m.textContent = err;
   if (w.out < new Date().toISOString().slice(0, 10)) return m.textContent = 'תאריך ההלוך כבר עבר.';
-  if (W.find((x) => x.city === w.city && x.out === w.out && x.back === w.back && JSON.stringify(airsOf(x)) === JSON.stringify(w.airlines) && JSON.stringify(paxOf(x)) === JSON.stringify(w.pax) && JSON.stringify([...baOf(x, 'out'), ...baOf(x, 'back')]) === JSON.stringify([w.flexOutBefore, w.flexOutAfter, w.flexBackBefore, w.flexBackAfter]))) return m.textContent = 'הטיול הזה כבר במעקב.';
+  if (W.find((x) => JSON.stringify(citiesOfW(x)) === JSON.stringify(w.cities) && x.out === w.out && x.back === w.back && JSON.stringify(airsOf(x)) === JSON.stringify(w.airlines) && JSON.stringify(paxOf(x)) === JSON.stringify(w.pax) && JSON.stringify([...baOf(x, 'out'), ...baOf(x, 'back')]) === JSON.stringify([w.flexOutBefore, w.flexOutAfter, w.flexBackBefore, w.flexBackAfter]))) return m.textContent = 'הטיול הזה כבר במעקב.';
   $('#fAdd').disabled = true;
   m.className = 'msg'; m.textContent = 'שומר…';
   try {

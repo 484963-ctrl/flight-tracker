@@ -281,6 +281,9 @@ function saveChannelStatus() {
   try { shabbatOk = (await import('./shabbat.mjs')).makeChecker(cfg.shabbat || {}); } catch (e) { console.log('שבת: לא נטען —', e.message); }
   await loadWatches();
   watches = watches.map(norm);
+  // כמה יעדים בטיול אחד (למשל לטירול: מינכן, אינסברוק, מילאנו, ונציה) — כל יעד נבדק בנפרד, והזול נבחר
+  const citiesOf = (w) => (Array.isArray(w.cities) && w.cities.length ? w.cities : [w.city]).filter(Boolean);
+  const subs = watches.flatMap((w) => citiesOf(w).map((c) => ({ ...w, city: c, id: citiesOf(w).length > 1 ? `${w.id}@${c}` : w.id, parent: w.id })));
   const now = new Date();
   const prev = rd('data/latest.json', {});
   const legsPrev = prev.legs || {};
@@ -299,14 +302,14 @@ function saveChannelStatus() {
   const legs = {};
   // המחיר בגוגל הוא לכל הנוסעים יחד — חיפוש נפרד לכל הרכב נוסעים
   const add = (from, to, date, pax) => { legs[`${from}|${to}|${date}${pax ? paxKey(pax) : ''}`] = { from, to, date, pax: pax || null, url: gfUrl(date, from, to, pax) }; };
-  for (const w of watches) {
+  for (const w of subs) {
     const p = paxOf(w);
     for (const d of around(w.out, w.outBefore, w.outAfter)) add(cfg.origin, w.city, d, p);
     for (const d of around(w.back, w.backBefore, w.backAfter)) add(w.city, cfg.origin, d, p);
   }
   const ov = cfg.overview;
   const overviewDue = ov && ov.on && (process.env.FULL || !prev.overviewAt || now - new Date(prev.overviewAt) > 20 * 3600e3);
-  if (overviewDue) for (const c of Object.keys(cfg.cities)) {
+  if (overviewDue) for (const c of (ov.cities || Object.keys(cfg.cities))) {
     for (const d of days(ov.outFrom, ov.outTo)) add(cfg.origin, c, d);
     for (const d of days(ov.backFrom, ov.backTo)) add(c, cfg.origin, d);
   }
@@ -359,7 +362,7 @@ function saveChannelStatus() {
   const wOut = {};
   // שלב 1: לפי המחירים לכיוון אחד — אילו צירופי תאריכים כדאי לבדוק כהלוך-חזור
   const plan = {};
-  for (const w of watches) {
+  for (const w of subs) {
     let allLoaded = true;
     const okO = (d) => { const m = match(w, w.outHours); return (x) => m(x) && inFlex(d, w.out, w.outBefore, w.outAfter, x.dep) && (!w.noShabbat || shabbatOk(d, x.dep, x.arr, cfg.origin, w.city)); };
     const okB = (d) => { const m = match(w, w.backHours); return (x) => m(x) && inFlex(d, w.back, w.backBefore, w.backAfter, x.dep) && (!w.noShabbat || shabbatOk(d, x.dep, x.arr, w.city, cfg.origin)); };
@@ -375,7 +378,7 @@ function saveChannelStatus() {
   // שלב 2: הלוך-חזור (כרטיס אחד).
   //   א. "טבלת תאריכים" — מחיר לכל צירוף תאריכים בטווח (בלי ההגבלות של שבת/חברה/שעות)
   //   ב. בודקים את הצירופים לפי הסדר מהזול, עם ההגבלות, עד שאי אפשר כבר למצוא זול יותר
-  const needRt = watches.filter((w) => plan[w.id].allDates.length);
+  const needRt = subs.filter((w) => plan[w.id].allDates.length);
   if (needRt.length) {
     process.stdout.write(`הלוך-חזור (${needRt.length} טיולים): `);
     const rtBrowser = await chromium.launch(process.env.CHROME_FULL ? { executablePath: process.env.CHROME_FULL, args: ['--headless=new'] } : { channel: 'chromium' });
@@ -409,7 +412,8 @@ function saveChannelStatus() {
     console.log();
   }
   // שלב 3: לכל טיול — הצירוף הזול. קודם הלוך-חזור; אם לא נטען — לפי שני כרטיסים לכיוון אחד
-  for (const w of watches) {
+  const subOut = {};
+  for (const w of subs) {
     const { pairs, allLoaded, rt } = plan[w.id];
     const okRt = rt.filter((x) => x.r.status === 'OK').sort((x, y) => x.r.price - y.r.price)[0];
     let best = null, isRt = false;
@@ -423,6 +427,20 @@ function saveChannelStatus() {
                    gridMin: plan[w.id].gridMin != null && price != null && plan[w.id].gridMin < price ? plan[w.id].gridMin : null,
                    outUrl: best && best.o.A && best.o.A.url, backUrl: best && best.k.B && best.k.B.url,
                    stale: !!(best && !isRt && ((best.o.A && best.o.A.stale) || (best.k.B && best.k.B.stale))), none: allLoaded && price == null && !plan[w.id].rt.some((x) => x.r.status === 'FAIL') };
+    subOut[w.id] = wOut[w.id];
+    if (w.id !== w.parent) delete wOut[w.id];
+  }
+  // לכל טיול: היעד הזול מבין היעדים שבחרת
+  for (const w of watches) {
+    const mine = subs.filter((x) => x.parent === w.id);
+    const res = mine.map((x) => ({ city: x.city, r: subOut[x.id] })).filter((x) => x.r);
+    const got = res.filter((x) => x.r.price != null).sort((a, b) => a.r.price - b.r.price);
+    const top = got[0] || res[0];
+    if (!top) continue;
+    wOut[w.id] = { ...top.r, city: top.city, cities: mine.length > 1 ? res.map((x) => ({ city: x.city, price: x.r.price, none: x.r.none, outDate: x.r.outDate, backDate: x.r.backDate })) : undefined,
+                   none: res.every((x) => x.r.none) };
+    w.city = top.city;
+    const price = wOut[w.id].price, a = wOut[w.id].out, b = wOut[w.id].back, isRt = wOut[w.id].rt;
     if (price == null) continue;
     const h = (wHist[w.id] = wHist[w.id] || []);
     if (!h.length || h[h.length - 1].price !== price) h.push({ t: now.toISOString(), price });
@@ -454,7 +472,8 @@ function saveChannelStatus() {
       const t = w.target ? (r && r.price != null && r.price <= w.target ? ` ✅ מתחת ליעד (${ils(w.target)})` : ` · יעד ${ils(w.target)}`) : '';
       const dd = r && r.outDate ? `${he(r.outDate)} – ${he(r.backDate)}` : `${he(w.out)} – ${he(w.back)}`;
       const pp = paxOf(w), pn = paxCount(pp);
-      L.push(`${CITY(w.city)} ${dd}${pn > 1 ? ` (${pn} נוסעים)` : ''}: ${p}${t}`);
+      const many = Array.isArray(w.cities) && w.cities.length > 1;
+      L.push(`${CITY(w.city)}${many ? ` (הזול מבין ${w.cities.length} יעדים)` : ''} ${dd}${pn > 1 ? ` (${pn} נוסעים)` : ''}: ${p}${t}`);
     }
     L.push('', 'המערכת בודקת כל חצי שעה ותשלח הודעה על כל ירידה.');
     if (process.env.PAGE_URL) L.push(process.env.PAGE_URL);
@@ -463,7 +482,7 @@ function saveChannelStatus() {
   }
 
   const fx = await getFx(prev.fx);
-  const rtLog = Object.fromEntries(watches.map((w) => [w.id, (plan[w.id] ? plan[w.id].rt : []).flatMap((x) => [`[${x.r.status}${x.r.price ? ' ₪' + x.r.price : ''}]`, ...(x.r.log || [])])]));
+  const rtLog = Object.fromEntries(subs.map((w) => [w.id, (plan[w.id] ? plan[w.id].rt : []).flatMap((x) => [`[${x.r.status}${x.r.price ? ' ₪' + x.r.price : ''}]`, ...(x.r.log || [])])]));
   wr('data/latest.json', { updated: now.toISOString(), fx, rtLog, ok: okCount, total: keys.length, overviewAt: overviewDue ? now.toISOString() : prev.overviewAt, legs: merged, watches: wOut });
   wr('data/watch-history.json', wHist);
   wr('data/state.json', state);
@@ -485,6 +504,7 @@ function message(alerts) {
   const L = [];
   for (const { w, price, a, b, rt, od, bd, why, from } of alerts) {
     L.push(`🔔 ${CITY(w.city)} — ${airLabel(w)} (ישיר) · ${paxText(paxOf(w))}`);
+    if (Array.isArray(w.cities) && w.cities.length > 1) L.push(`(הזול מבין: ${w.cities.map(CITY).join(', ')})`);
     L.push(from != null ? `המחיר ירד מ-${ils(from)} ל-${ils(price)}` : `המחיר עכשיו: ${ils(price)}`);
     if (why === 'target') L.push(`✅ מתחת למחיר שקבעת (${ils(w.target)})!`);
     L.push(`🛫 הלוך ${he(od)}, ${a.dep} (${a.air})${rt ? '' : ` — ${ils(a.price)}`}`);
