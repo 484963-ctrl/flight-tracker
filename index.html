@@ -244,9 +244,11 @@ function hoursSel(id, r) {
   return `<label>מ-<select id="${id}F"><option value="">כל שעה</option>${Array.from({ length: 24 }, (_, i) => `<option value="${i}" ${f === i ? 'selected' : ''}>${hh(i)}</option>`).join('')}</select></label>
     <label>עד<select id="${id}T"><option value="">כל שעה</option>${Array.from({ length: 24 }, (_, i) => i + 1).map((i) => `<option value="${i}" ${t === i ? 'selected' : ''}>${hh(i)}</option>`).join('')}</select></label>`;
 }
-const FLEX = [[0, 'בדיוק בתאריך'], [0.25, '± 6 שעות'], [0.5, '± 12 שעות'], [1, '± 1 יום'], [2, '± 2 ימים'], [3, '± 3 ימים']];
-const flexText = (v) => (FLEX.find((x) => x[0] === +v) || [0, `± ${v} ימים`])[1];
-const flexSel = (id, v) => `<label>גמישות<select id="${id}">${FLEX.map(([n, t]) => `<option value="${n}" ${(+v || 0) === n ? 'selected' : ''}>${t}</option>`).join('')}</select></label>`;
+const FLEX = [[0, 'בדיוק בתאריך'], [0.25, '6 שעות'], [0.5, '12 שעות'], [1, 'יום'], [2, 'יומיים'], [3, '3 ימים']];
+const DIRS = [['both', 'לפני ואחרי'], ['before', 'רק לפני'], ['after', 'רק אחרי']];
+const flexText = (v, dir = 'both') => { const t = (FLEX.find((x) => x[0] === +v) || [0, `${v} ימים`])[1]; return dir === 'before' ? `${t} לפני` : dir === 'after' ? `${t} אחרי` : `± ${t}`; };
+const flexSel = (id, v, dir) => `<label>גמישות<select id="${id}" onchange="this.closest('.row').querySelector('[data-dir]').style.display = +this.value ? '' : 'none'">${FLEX.map(([n, t]) => `<option value="${n}" ${(+v || 0) === n ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+  <label data-dir style="${+v ? '' : 'display:none'}">לאיזה כיוון<select id="${id}D">${DIRS.map(([k, t]) => `<option value="${k}" ${(dir || 'both') === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>`;
 function tripForm(p, w = {}) {
   const airs = w.id ? airsOf(w) : ['El Al'];
   return `<div class="tf">
@@ -255,10 +257,10 @@ function tripForm(p, w = {}) {
       <label>להתריע מתחת ל-₪<input type="number" id="${p}Target" min="0" step="10" placeholder="למשל 1800" value="${w.target || ''}"></label>
     </div>
     <fieldset><legend>🛫 הלוך</legend><div class="row">
-      <label>תאריך<input type="date" id="${p}Out" value="${w.out || ''}"></label>${flexSel(p + 'FlexO', w.flexOut)}
+      <label>תאריך<input type="date" id="${p}Out" value="${w.out || ''}"></label>${flexSel(p + 'FlexO', w.flexOut, w.flexOutDir)}
       <span style="align-self:center;color:var(--mute);font-size:14px">שעת המראה:</span>${hoursSel(p + 'HO', w.outHours)}</div></fieldset>
     <fieldset><legend>🛬 חזור</legend><div class="row">
-      <label>תאריך<input type="date" id="${p}Back" value="${w.back || ''}"></label>${flexSel(p + 'FlexB', w.flexBack)}
+      <label>תאריך<input type="date" id="${p}Back" value="${w.back || ''}"></label>${flexSel(p + 'FlexB', w.flexBack, w.flexBackDir)}
       <span style="align-self:center;color:var(--mute);font-size:14px">שעת המראה:</span>${hoursSel(p + 'HB', w.backHours)}</div></fieldset>
     <fieldset><legend>✈️ חברות תעופה (טיסות ישירות) — בלי סימון = כל החברות</legend>
       <div class="chips">${AIRS.map(([k, he]) => `<label class="chip"><input type="checkbox" data-air="${p}" value="${k}" ${airs.includes(k) ? 'checked' : ''}> ${he}</label>`).join('')}</div></fieldset>
@@ -267,7 +269,7 @@ function tripForm(p, w = {}) {
 function readTrip(p) {
   const hrs = (id) => { const f = $(`#${id}F`).value, t = $(`#${id}T`).value; return f === '' && t === '' ? null : [f === '' ? 0 : +f, t === '' ? 24 : +t]; };
   return { out: $(`#${p}Out`).value, back: $(`#${p}Back`).value, target: +$(`#${p}Target`).value || null,
-    flexOut: +$(`#${p}FlexO`).value, flexBack: +$(`#${p}FlexB`).value, outHours: hrs(p + 'HO'), backHours: hrs(p + 'HB'),
+    flexOut: +$(`#${p}FlexO`).value, flexBack: +$(`#${p}FlexB`).value, flexOutDir: $(`#${p}FlexOD`).value, flexBackDir: $(`#${p}FlexBD`).value, outHours: hrs(p + 'HO'), backHours: hrs(p + 'HB'),
     airlines: [...document.querySelectorAll(`[data-air="${p}"]:checked`)].map((x) => x.value) };
 }
 function checkTrip(t) {
@@ -278,7 +280,7 @@ function checkTrip(t) {
 }
 function optsText(w) {
   const o = [];
-  if (w.flexOut || w.flexBack) o.push(`גמיש: הלוך ${flexText(w.flexOut || 0)}, חזור ${flexText(w.flexBack || 0)}`);
+  if (w.flexOut || w.flexBack) o.push(`גמיש: ${[w.flexOut ? `הלוך ${flexText(w.flexOut, w.flexOutDir)}` : '', w.flexBack ? `חזור ${flexText(w.flexBack, w.flexBackDir)}` : ''].filter(Boolean).join(', ')}`);
   if (w.outHours) o.push(`המראה בהלוך ${hh(w.outHours[0])}–${hh(w.outHours[1])}`);
   if (w.backHours) o.push(`המראה בחזור ${hh(w.backHours[0])}–${hh(w.backHours[1])}`);
   return o.join(' · ');
@@ -363,7 +365,7 @@ function bindCards() {
       const list = W.map((w) => {
         if (w.id !== b.dataset.esave) return w;
         const same = (k) => JSON.stringify(k === 'airlines' ? airsOf(w) : w[k] ?? null) === JSON.stringify(t[k] ?? null);
-        const moved = !['out', 'back', 'flexOut', 'flexBack', 'outHours', 'backHours', 'airlines'].every((k) => k === 'flexOut' || k === 'flexBack' ? (+w[k] || 0) === t[k] : same(k));
+        const moved = !['out', 'back', 'flexOut', 'flexBack', 'flexOutDir', 'flexBackDir', 'outHours', 'backHours', 'airlines'].every((k) => k === 'flexOut' || k === 'flexBack' ? (+w[k] || 0) === t[k] : k === 'flexOutDir' || k === 'flexBackDir' ? (w[k] || 'both') === t[k] : same(k));
         // טיסות אחרות = טיול חדש: מתחילים מעקב (וגרף) מחדש
         const { airline, ...rest } = w;
         return { ...rest, ...t, id: moved ? 'w' + Date.now().toString(36) : w.id };
