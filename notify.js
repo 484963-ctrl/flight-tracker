@@ -41,10 +41,30 @@ async function email(text) {
   return 'מייל: נשלח';
 }
 
+// אילו ערוצים מחוברים (יש להם סודות ב-GitHub) — מוצג באתר
+const configured = () => ({
+  telegram: !!E.TELEGRAM_TOKEN,
+  whatsapp: !!(E.WHATSAPP_PHONE && E.WHATSAPP_APIKEY),
+  email: !!(E.MAIL_USER && E.MAIL_PASS),
+});
+
+// הערוצים שנבחרו באתר (ברירת מחדל: כולם)
+let chosen = { telegram: true, whatsapp: true, email: true };
+const setChannels = (c) => { if (c && typeof c === 'object') chosen = { ...chosen, ...c }; };
+
+const status = {}; // תוצאת השליחה האחרונה בכל ערוץ
 async function send(text) {
-  for (const fn of [telegram, whatsapp, email]) {
-    try { console.log(await fn(text)); } catch (e) { console.log(fn.name + ': שגיאה', e.message); }
+  for (const [k, fn] of [['telegram', telegram], ['whatsapp', whatsapp], ['email', email]]) {
+    if (chosen[k] === false) { console.log(k + ': כבוי באתר'); continue; }
+    try {
+      const r = await fn(text);
+      console.log(r);
+      if (configured()[k]) status[k] = { ok: /נשלח/.test(r), msg: r, t: new Date().toISOString() };
+    } catch (e) {
+      console.log(k + ': שגיאה', e.message);
+      status[k] = { ok: false, msg: e.message, t: new Date().toISOString() };
+    }
   }
 }
 
-module.exports = { send };
+module.exports = { send, configured, setChannels, status };

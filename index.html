@@ -57,6 +57,15 @@
   .sat td { color:#aaa; }
   .small { font-size:12px; color:var(--mute); display:block; }
   @media (max-width:760px) { .grid2 { grid-template-columns:1fr; } .price { font-size:40px; } }
+  .chans { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:10px; margin-top:10px; }
+  .chan { border:2px solid var(--line); border-radius:14px; padding:12px; }
+  .chan.on { border-color:var(--blue); background:#f3f7ff; }
+  .chan label.tg { display:flex; align-items:center; gap:10px; font-size:18px; font-weight:700; cursor:pointer; }
+  .chan input[type=checkbox] { width:22px; height:22px; }
+  .chan .st { font-size:13px; margin-top:6px; }
+  .chan .st.ok { color:var(--green); } .chan .st.no { color:var(--red); }
+  .chan details { font-size:13px; margin-top:6px; line-height:1.7; }
+  .chan details summary { font-size:13px; font-weight:600; color:var(--blue); }
   .note { font-size:13px; color:var(--mute); margin-top:16px; line-height:1.7; }
   code { background:#eef1f7; padding:1px 5px; border-radius:5px; }
 </style>
@@ -98,6 +107,14 @@
       <button class="pri" id="fAdd">הוספה</button>
     </div>
     <div class="msg" id="fMsg"></div>
+  </div>
+
+  <div class="box" id="chBox">
+    <b style="font-size:18px">📨 איפה לקבל התראות</b>
+    <div class="note" style="margin-top:2px">מסמנים את הערוצים הרצויים. ההודעות: סיכום כל בוקר, וכל ירידה במחיר.</div>
+    <div class="chans" id="chans"></div>
+    <div class="form" style="margin-top:10px"><button id="chTest">📨 לשלוח הודעת בדיקה</button></div>
+    <div class="msg" id="chMsg"></div>
   </div>
 
   <div class="cards" id="cards"></div>
@@ -148,11 +165,14 @@ async function saveWatches(list) {
   render();
 }
 
+let SET = {}, CH = {};
 let CFG = {}, W = [], L = {}, WH = {}, pending = 0, ovCity = null, confirmDel = null, editT = null;
 
 async function load() {
   [CFG, L, WH] = await Promise.all([getFile('config.json', {}), getFile('data/latest.json', {}), getFile('data/watch-history.json', {})]);
   try { W = CFG.supabase ? await rpc('flight_get_watches') : await getFile('watches.json', []); } catch { W = await getFile('watches.json', []); }
+  try { SET = (CFG.supabase && await rpc('flight_get_settings')) || {}; } catch { SET = {}; }
+  CH = await getFile('data/channels.json', {});
   if (pending && L.updated && new Date(L.updated) > pending) pending = 0;
   render();
 }
@@ -170,6 +190,7 @@ function render() {
   const cards = W.map((w) => card(w, can)).join('');
   $('#cards').innerHTML = cards || `<div class="box empty">עוד אין טיולים במעקב. ${can ? 'מוסיפים טיול למעלה.' : 'לוחצים "🔑 חיבור לעריכה" כדי להוסיף.'}</div>`;
   bindCards();
+  renderChannels(can);
   renderOverview();
 }
 
@@ -253,6 +274,43 @@ function bindCards() {
     } catch (e) { $('#eMsg').textContent = e.message; b.disabled = false; }
   });
 }
+
+// --- ערוצי התראה ---
+const SECRETS = 'https://github.com/484963-ctrl/flight-tracker/settings/secrets/actions/new';
+const CHN = {
+  telegram: { name: '✈️ טלגרם', how: `1. ב-<a href="https://t.me/BotFather" target="_blank">BotFather</a> שולחים <code>/newbot</code> ומקבלים קוד.<br>2. שומרים אותו <a href="${SECRETS}" target="_blank">כאן</a> בשם <code>TELEGRAM_TOKEN</code>.<br>3. שולחים לבוט החדש "שלום".` },
+  whatsapp: { name: '💬 וואטסאפ', how: `1. שומרים באנשי הקשר את <bdi dir="ltr"><b>+34 621 062 163</b></bdi> (CallMeBot).<br>2. שולחים לו בוואטסאפ: <code>I allow callmebot to send me messages</code> ומקבלים APIKEY.<br>3. <a href="${SECRETS}" target="_blank">כאן</a> שומרים <code>WHATSAPP_PHONE</code> (למשל <bdi dir="ltr">+972501234567</bdi>) ו-<code>WHATSAPP_APIKEY</code>.<br>שירות חינמי, לפעמים לא זמין.` },
+  email: { name: '📧 מייל', how: `1. ב-Gmail צריך אימות דו-שלבי, ואז <a href="https://myaccount.google.com/apppasswords" target="_blank">סיסמת אפליקציה</a> (16 אותיות).<br>2. <a href="${SECRETS}" target="_blank">כאן</a> שומרים <code>MAIL_USER</code> (כתובת ה-Gmail) ו-<code>MAIL_PASS</code> (סיסמת האפליקציה).<br>3. רשות: <code>MAIL_TO</code> — לשלוח לכתובת אחרת.` },
+};
+function renderChannels(can) {
+  const ch = (SET.channels) || { telegram: true, whatsapp: true, email: true };
+  $('#chans').innerHTML = Object.entries(CHN).map(([k, c]) => {
+    const st = CH[k] || {}, on = ch[k] !== false, last = st.last;
+    const stat = !st.configured
+      ? `<div class="st no">✗ עוד לא מחובר</div><details><summary>איך מחברים?</summary>${c.how}</details>`
+      : `<div class="st ok">✓ מחובר${last ? ` · הודעה אחרונה ${ago(last.t)}${last.ok ? '' : ' — <span style="color:var(--red)">נכשלה</span>'}` : ''}</div>`;
+    return `<div class="chan ${on && st.configured ? 'on' : ''}">
+      <label class="tg"><input type="checkbox" data-ch="${k}" ${on ? 'checked' : ''} ${can ? '' : 'disabled'}> ${c.name}</label>${stat}</div>`;
+  }).join('');
+  $('#chTest').style.display = can ? '' : 'none';
+  document.querySelectorAll('[data-ch]').forEach((b) => b.onchange = async () => {
+    const channels = { ...ch, [b.dataset.ch]: b.checked };
+    const m = $('#chMsg');
+    if (!Object.values(channels).some(Boolean)) { b.checked = true; m.className = 'msg err'; m.textContent = 'צריך להשאיר לפחות ערוץ אחד.'; return; }
+    try { await saveSettings({ ...SET, channels }); m.className = 'msg ok'; m.textContent = '✓ נשמר.'; }
+    catch (e) { b.checked = !b.checked; m.className = 'msg err'; m.textContent = e.message; }
+  });
+}
+async function saveSettings(next) {
+  const ok = await rpc('flight_save_settings', { pass: code(), data: next });
+  if (!ok) { setCode(''); render(); throw new Error('הקוד לא נכון — צריך להיכנס שוב'); }
+  SET = next; render();
+}
+$('#chTest').onclick = async () => {
+  const m = $('#chMsg');
+  try { await saveSettings({ ...SET, testAt: new Date().toISOString() }); m.className = 'msg ok'; m.textContent = '✓ הודעת בדיקה תישלח לערוצים המסומנים בבדיקה הבאה (תוך חצי שעה).'; }
+  catch (e) { m.className = 'msg err'; m.textContent = e.message; }
+};
 
 // --- סקירת כל התאריכים ---
 function renderOverview() {

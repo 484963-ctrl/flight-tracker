@@ -91,6 +91,7 @@ async function scanOne(ctx, url) {
 const match = (w) => (x) => x.stops === 'Nonstop' && (!AIR[w.airline] || x.air.startsWith(AIR[w.airline]));
 const pick = (res, fn) => (res || []).find(fn) || null; // res ממוין לפי מחיר
 
+let settings = {};
 // הטיולים נשמרים במסד (Supabase) — מה שהוגדר באתר
 async function loadWatches() {
   const sb = cfg.supabase;
@@ -100,7 +101,19 @@ async function loadWatches() {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const w = await r.json();
     if (Array.isArray(w)) { watches = w; wr('watches.json', w); }
+    // לאן לשלוח התראות — נבחר באתר
+    const r2 = await fetch(`${sb.url}/rest/v1/rpc/flight_get_settings`, { method: 'POST', headers: { apikey: sb.key, 'Content-Type': 'application/json' }, body: '{}' });
+    if (r2.ok) { const st = await r2.json(); if (st && st.channels) notify.setChannels(st.channels); settings = st || {}; }
   } catch (e) { console.log('לא הצלחתי לטעון את הטיולים מהמסד, משתמש בקובץ:', e.message); }
+}
+
+// מצב הערוצים לאתר: מחובר? מתי נשלח לאחרונה? הצליח?
+function saveChannelStatus() {
+  const prev = rd('data/channels.json', {});
+  const conf = notify.configured();
+  const out = {};
+  for (const k of ['telegram', 'whatsapp', 'email']) out[k] = { configured: conf[k], last: notify.status[k] || (prev[k] && prev[k].last) || null };
+  wr('data/channels.json', out);
 }
 
 (async () => {
@@ -211,7 +224,11 @@ async function loadWatches() {
 
   if (alerts.length) await notify.send(message(alerts));
   if (notes.length) await notify.send(notes.join('\n\n'));
-  if (!alerts.length && process.env.TEST_NOTIFY) await notify.send('✈️ בדיקה: מעקב הטיסות מחובר ועובד.\nתקבל הודעה על כל ירידה במחיר של טיול שלך, וסיכום כל בוקר.' + (process.env.PAGE_URL ? '\n\n' + process.env.PAGE_URL : ''));
+  // "שלח הודעת בדיקה" מהאתר
+  const testReq = settings.testAt && settings.testAt !== sys.testDone;
+  if (testReq) { sys.testDone = settings.testAt; wr('data/state.json', state); }
+  if (!alerts.length && (process.env.TEST_NOTIFY || testReq)) await notify.send('✈️ בדיקה: מעקב הטיסות מחובר ועובד.\nתקבל הודעה על כל ירידה במחיר של טיול שלך, וסיכום כל בוקר.' + (process.env.PAGE_URL ? '\n\n' + process.env.PAGE_URL : ''));
+  saveChannelStatus();
 })();
 
 const DAY = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'שבת'];
