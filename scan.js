@@ -139,6 +139,58 @@ let shabbatOk = () => true;
 const airLabel = (w) => !w.airlines.length ? 'כל החברות' : w.airlines.map((a) => AIR_HE[a] || a).join(', ');
 const pick = (res, fn) => (res || []).find(fn) || null; // res ממוין לפי מחיר
 
+// --- הלוך-חזור בכרטיס אחד: בדרך כלל זול בהרבה משני כרטיסים לכיוון אחד (למשל באל על) ---
+function tfsRT(o, b, from, to, pax) {
+  const s = (t) => Buffer.from(t, 'utf8');
+  const f = (tag, buf) => Buffer.concat([Buffer.from([tag, buf.length]), buf]);
+  const leg = (d, a, c) => f(0x1a, Buffer.concat([f(0x12, s(d)), Buffer.from([0x28, 0]), f(0x6a, f(0x12, s(a))), f(0x72, f(0x12, s(c)))]));
+  return Buffer.concat([leg(o, from, to), leg(b, to, from), f(0x42, Buffer.from(paxBytes(pax))), Buffer.from([0x48, 1, 0x98, 1, 1])]).toString('base64');
+}
+// מחכים שיהיו מחירים בדף ושמספרם יפסיק להשתנות
+async function waitList(p, max) {
+  let last = -1;
+  for (let i = 0; i < max; i++) {
+    await p.waitForTimeout(1500);
+    const t = await p.evaluate(() => document.body.innerText);
+    if (/No results returned|No options matching/i.test(t)) return 'NONE';
+    const n = (t.match(/^₪[\d,]+$/gm) || []).length;
+    if (n > 0 && n === last) return t;
+    last = n;
+  }
+  return null;
+}
+// okOut/okBack: אילו טיסות מתאימות (חברה, שעות, גמישות, שבת). מחזיר את הצירוף הזול: מחיר כולל לכל הנוסעים
+async function rtSearch(ctx, o, b, from, to, pax, okOut, okBack) {
+  const url = `https://www.google.com/travel/flights/search?tfs=${encodeURIComponent(tfsRT(o, b, from, to, pax))}&hl=en&curr=ILS`;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const p = await ctx.newPage();
+    try {
+      await p.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+      const t = await waitList(p, 30);
+      if (t === 'NONE') return { status: 'NONE' };
+      if (!t) throw new Error('לא נטען');
+      const outs = parse(t).filter(okOut).slice(0, 3);
+      if (!outs.length) return { status: 'NONE' };
+      for (const c of outs) {
+        const before = p.url();
+        const item = p.locator('li').filter({ hasText: c.air.split(/[ ,]/)[0] }).filter({ hasText: c.dep.split(' ')[0] });
+        if (!(await item.count())) continue;
+        await item.first().click();
+        await p.waitForURL((u) => u.toString() !== before, { timeout: 20000 }).catch(() => {});
+        const t2 = await waitList(p, 20);
+        if (t2 && t2 !== 'NONE') {
+          const back = parse(t2).filter(okBack)[0];
+          if (back) return { status: 'OK', price: back.price, out: { ...c, price: undefined }, back: { ...back, price: undefined } };
+        }
+        await p.goBack({ waitUntil: 'domcontentloaded' }).catch(() => {});
+        await waitList(p, 20);
+      }
+      return { status: 'NONE' };
+    } catch { } finally { await p.close().catch(() => {}); }
+  }
+  return { status: 'FAIL' };
+}
+
 let settings = {};
 // הטיולים נשמרים במסד (Supabase) — מה שהוגדר באתר
 async function loadWatches() {
@@ -260,20 +312,49 @@ function saveChannelStatus() {
 
   const alerts = [];
   const wOut = {};
+  // שלב 1: לפי המחירים לכיוון אחד — אילו צירופי תאריכים כדאי לבדוק כהלוך-חזור
+  const plan = {};
   for (const w of watches) {
-    // הצירוף הכי זול מכל התאריכים האפשריים (לפי הגמישות), בשעות ובחברות שנבחרו
-    let best = null, anyMissing = false, allLoaded = true, options = 0;
-    const outs = around(w.out, w.outBefore, w.outAfter).map((d) => { const A = merged[`${cfg.origin}|${w.city}|${d}${paxKey(paxOf(w))}`]; if (!A || A.status === 'FAIL') allLoaded = false; const m = match(w, w.outHours); return { d, A, f: A && pick(A.res, (x) => m(x) && inFlex(d, w.out, w.outBefore, w.outAfter, x.dep) && (!w.noShabbat || shabbatOk(d, x.dep, x.arr, cfg.origin, w.city))) }; });
-    const backs = around(w.back, w.backBefore, w.backAfter).map((d) => { const B = merged[`${w.city}|${cfg.origin}|${d}${paxKey(paxOf(w))}`]; if (!B || B.status === 'FAIL') allLoaded = false; const m = match(w, w.backHours); return { d, B, f: B && pick(B.res, (x) => m(x) && inFlex(d, w.back, w.backBefore, w.backAfter, x.dep) && (!w.noShabbat || shabbatOk(d, x.dep, x.arr, w.city, cfg.origin))) }; });
-    for (const o of outs) for (const k of backs) {
-      if (k.d <= o.d || !o.f || !k.f) continue;
-      options++;
-      const p = o.f.price + k.f.price;
-      if (!best || p < best.price) best = { price: p, o, k };
-    }
+    let allLoaded = true;
+    const okO = (d) => { const m = match(w, w.outHours); return (x) => m(x) && inFlex(d, w.out, w.outBefore, w.outAfter, x.dep) && (!w.noShabbat || shabbatOk(d, x.dep, x.arr, cfg.origin, w.city)); };
+    const okB = (d) => { const m = match(w, w.backHours); return (x) => m(x) && inFlex(d, w.back, w.backBefore, w.backAfter, x.dep) && (!w.noShabbat || shabbatOk(d, x.dep, x.arr, w.city, cfg.origin)); };
+    const outs = around(w.out, w.outBefore, w.outAfter).map((d) => { const A = merged[`${cfg.origin}|${w.city}|${d}${paxKey(paxOf(w))}`]; if (!A || A.status === 'FAIL') allLoaded = false; return { d, A, ok: okO(d), f: A && pick(A.res, okO(d)) }; });
+    const backs = around(w.back, w.backBefore, w.backAfter).map((d) => { const B = merged[`${w.city}|${cfg.origin}|${d}${paxKey(paxOf(w))}`]; if (!B || B.status === 'FAIL') allLoaded = false; return { d, B, ok: okB(d), f: B && pick(B.res, okB(d)) }; });
+    const pairs = [];
+    for (const o of outs) for (const k of backs) if (k.d > o.d && o.f && k.f) pairs.push({ o, k, ow: o.f.price + k.f.price });
+    pairs.sort((x, y) => x.ow - y.ow);
+    plan[w.id] = { pairs, allLoaded, rt: [] };
+  }
+  // שלב 2: חיפוש הלוך-חזור (כרטיס אחד) ל-4 הצירופים הזולים של כל טיול
+  const rtJobs = [];
+  for (const w of watches) for (const pr of plan[w.id].pairs.slice(0, +(cfg.rtPairs || 4))) rtJobs.push({ w, pr });
+  if (rtJobs.length) {
+    process.stdout.write(`הלוך-חזור (${rtJobs.length}): `);
+    const rtBrowser = await chromium.launch(process.env.CHROME_FULL ? { executablePath: process.env.CHROME_FULL, args: ['--headless=new'] } : { channel: 'chromium' });
+    const rctx = await rtBrowser.newContext({ locale: 'en-US' });
+    let ri = 0;
+    await Promise.all(Array.from({ length: 3 }, async () => {
+      while (ri < rtJobs.length) {
+        const { w, pr } = rtJobs[ri++];
+        const r = await rtSearch(rctx, pr.o.d, pr.k.d, cfg.origin, w.city, paxOf(w), pr.o.ok, pr.k.ok);
+        process.stdout.write(r.status === 'OK' ? '.' : r.status === 'NONE' ? 'o' : 'x');
+        plan[w.id].rt.push({ pr, r });
+      }
+    }));
+    await rtBrowser.close();
+    console.log();
+  }
+  // שלב 3: לכל טיול — הצירוף הזול. קודם הלוך-חזור; אם לא נטען — לפי שני כרטיסים לכיוון אחד
+  for (const w of watches) {
+    const { pairs, allLoaded, rt } = plan[w.id];
+    const okRt = rt.filter((x) => x.r.status === 'OK').sort((x, y) => x.r.price - y.r.price)[0];
+    let best = null, isRt = false;
+    if (okRt) { best = { price: okRt.r.price, o: { ...okRt.pr.o, f: okRt.r.out }, k: { ...okRt.pr.k, f: okRt.r.back } }; isRt = true; }
+    else if (pairs.length) best = { price: pairs[0].ow, o: pairs[0].o, k: pairs[0].k };
+    const options = pairs.length;
     const price = best ? best.price : null;
     const a = best && best.o.f, b = best && best.k.f;
-    wOut[w.id] = { price, out: a, back: b, outDate: best && best.o.d, backDate: best && best.k.d, options,
+    wOut[w.id] = { price, out: a, back: b, outDate: best && best.o.d, backDate: best && best.k.d, options, rt: isRt,
                    outUrl: best && best.o.A.url, backUrl: best && best.k.B.url,
                    stale: !!(best && (best.o.A.stale || best.k.B.stale)), none: allLoaded && price == null };
     if (price == null) continue;
@@ -282,12 +363,14 @@ function saveChannelStatus() {
 
     // התראה: מתחת ליעד (פעם ראשונה, או ירידה נוספת), או — בלי יעד — כל ירידה משמעותית
     const s = (state[w.id] = state[w.id] || {});
+    if (isRt && !s.rt) s.last = null; // עברנו למחיר הלוך-חזור — לא שולחים 'ירידה' בגלל שינוי השיטה
+    s.rt = isRt;
     const minDrop = cfg.alertMinDrop || 30;
     // התראה על כל ירידה (₪30 ומעלה) מאז הבדיקה הקודמת; ובנוסף — כשהמחיר עובר אל מתחת ליעד
     const under = w.target && price <= w.target;
     const firstUnder = under && !s.under;
     if (firstUnder || (s.last != null && s.last - price >= minDrop))
-      alerts.push({ w, price, a, b, od: wOut[w.id].outDate, bd: wOut[w.id].backDate, why: under ? 'target' : 'drop', from: s.last });
+      alerts.push({ w, price, a, b, rt: isRt, od: wOut[w.id].outDate, bd: wOut[w.id].backDate, why: under ? 'target' : 'drop', from: s.last });
     if (w.target) s.under = under ? true : price > w.target + minDrop ? false : s.under;
     s.last = price;
   }
@@ -333,12 +416,13 @@ const he = (d) => { const [, m, day] = d.split('-'); const w = new Date(d + 'T12
 const ils = (n) => '₪' + n.toLocaleString('en-US');
 function message(alerts) {
   const L = [];
-  for (const { w, price, a, b, od, bd, why, from } of alerts) {
+  for (const { w, price, a, b, rt, od, bd, why, from } of alerts) {
     L.push(`🔔 ${CITY(w.city)} — ${airLabel(w)} (ישיר) · ${paxText(paxOf(w))}`);
     L.push(from != null ? `המחיר ירד מ-${ils(from)} ל-${ils(price)}` : `המחיר עכשיו: ${ils(price)}`);
     if (why === 'target') L.push(`✅ מתחת למחיר שקבעת (${ils(w.target)})!`);
-    L.push(`🛫 הלוך ${he(od)}, ${a.dep} (${a.air}) — ${ils(a.price)}`);
-    L.push(`🛬 חזור ${he(bd)}, ${b.dep} (${b.air}) — ${ils(b.price)}`);
+    L.push(`🛫 הלוך ${he(od)}, ${a.dep} (${a.air})${rt ? '' : ` — ${ils(a.price)}`}`);
+    L.push(`🛬 חזור ${he(bd)}, ${b.dep} (${b.air})${rt ? '' : ` — ${ils(b.price)}`}`);
+    if (rt) L.push('🎫 מחיר הלוך-חזור בכרטיס אחד');
     if (paxCount(paxOf(w)) > 1) L.push(`💰 לכל ${paxCount(paxOf(w))} הנוסעים · בערך ${ils(Math.round(price / paxCount(paxOf(w))))} לנוסע`);
     L.push(`🔎 בגוגל טיסות: ${gfRound(od, bd, cfg.origin, w.city, paxOf(w))}`);
     L.push('');
