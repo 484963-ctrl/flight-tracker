@@ -110,9 +110,20 @@ async function scanOne(ctx, url) {
 // הטיסה הכי זולה שמתאימה לטיול: ישירה, ואם נבחרה חברה — רק שלה
 // --- אפשרויות של טיול: חברות, גמישות בתאריכים, שעות המראה ---
 const AIR_HE = { 'El Al': 'אל על', Israir: 'ישראייר', Arkia: 'ארקיע', Lufthansa: 'לופטהנזה', SWISS: 'סוויס', ITA: 'ITA', Austrian: 'אוסטריאן', 'Wizz Air': 'ויז אייר', easyJet: 'איזיג׳ט', Ryanair: 'ריינאייר', Aegean: 'אג׳יאן' };
-const cap = (v) => Math.min(3, Math.max(0, +v || 0));
+const cap = (v) => Math.min(3, Math.max(-1, +v || 0));
 const ba = (val, flex, dir, side) => val != null ? cap(val) : (!dir || dir === 'both' || dir === side) ? cap(flex) : 0;
+// חלון זמנים ("החל מ... עד...") ← תאריך מרכזי + כמה ימים לפני ואחרי (גם חלקי יום)
+function fromWindow(from, to) {
+  const f = Date.parse(from + ':00Z'), t = Date.parse(to + ':00Z');
+  if (!(f < t)) return null;
+  const mid = new Date((f + t) / 2).toISOString().slice(0, 10);
+  const b0 = Date.parse(mid + 'T00:00:00Z');
+  return { base: mid, before: Math.min(3, Math.max(0, (b0 - f) / 864e5)), after: Math.min(3, Math.max(-1, (t - (b0 + 864e5)) / 864e5)) };
+}
 function norm(w) {
+  const o = w.outFrom && w.outTo && fromWindow(w.outFrom, w.outTo), k = w.backFrom && w.backTo && fromWindow(w.backFrom, w.backTo);
+  if (o) w = { ...w, out: o.base, flexOutBefore: o.before, flexOutAfter: o.after, flexOutDir: undefined };
+  if (k) w = { ...w, back: k.base, flexBackBefore: k.before, flexBackAfter: k.after, flexBackDir: undefined };
   const airlines = Array.isArray(w.airlines) ? w.airlines : w.airline === 'elal' ? ['El Al'] : [];
   return { ...w, airlines, flexOut: Math.min(3, Math.max(0, +w.flexOut || 0)), flexBack: Math.min(3, Math.max(0, +w.flexBack || 0)), outHours: w.outHours || null, backHours: w.backHours || null,
     // כמה גמישות לפני התאריך ואחריו (בימים; 0.25 = 6 שעות). תיקים ישנים: flex + כיוון
@@ -189,7 +200,8 @@ async function gridSearch1(ctx, o, b, from, to, pax) {
       for (let i = 0; i < 30; i++) {
         await p.waitForTimeout(1500);
         cells = await p.evaluate(() => [...document.querySelectorAll('[role=dialog] [role=button][aria-label]')].map((e) => e.getAttribute('aria-label')).filter((a) => /^₪[\d,]+, [A-Z][a-z]{2} \d{1,2} to [A-Z][a-z]{2} \d{1,2}$/.test(a)));
-        if (cells.length >= 10) break;
+        if (cells.length >= 10 && cells.length === (p._lastCells || 0)) break; // הטבלה סיימה להיטען (מספר המשבצות לא השתנה)
+        p._lastCells = cells.length;
       }
       if (!cells.length) throw new Error('הטבלה לא נטענה');
       const grid = {};
