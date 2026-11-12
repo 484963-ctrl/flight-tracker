@@ -71,6 +71,8 @@
   .up { color:var(--red); font-weight:700; }
   .legs { margin-top:12px; border-top:1px dashed var(--line); padding-top:10px; font-size:14px; line-height:1.9; }
   .legs a { color:var(--blue); }
+  .gbtn { display:block; text-align:center; margin-top:10px; padding:10px; border-radius:12px; background:var(--sky); color:var(--blue2) !important; font-weight:700; text-decoration:none; }
+  .gbtn:hover { background:#dce8ff; }
   .low { font-size:14px; color:var(--mute); margin-top:6px; }
   svg.sp { width:100%; height:60px; margin-top:8px; }
   .tools { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; border-top:1px solid var(--line); padding-top:8px; }
@@ -297,6 +299,15 @@ function optsText(w) {
   return o.join(' · ');
 }
 
+// קישור לגוגל טיסות: הלוך-חזור, טיסות ישירות, בעברית
+function gfRound(o, b, from, to) {
+  const enc = (t) => [...new TextEncoder().encode(t)];
+  const f = (tag, x) => [tag, x.length, ...x];
+  const leg = (d, a, c) => f(0x1a, [...f(0x12, enc(d)), 0x28, 0, ...f(0x6a, f(0x12, enc(a))), ...f(0x72, f(0x12, enc(c)))]);
+  const bytes = [...leg(o, from, to), ...leg(b, to, from), 0x42, 1, 1, 0x48, 1, 0x98, 1, 1];
+  return `https://www.google.com/travel/flights/search?tfs=${encodeURIComponent(btoa(String.fromCharCode(...bytes)))}&hl=iw&gl=IL&curr=ILS`;
+}
+
 function card(w, can) {
   const r = (L.watches || {})[w.id];
   const h = (WH[w.id] || []);
@@ -315,7 +326,7 @@ function card(w, can) {
   const status = price != null ? `<div class="price">${ils(price)}${usdTag(price)}</div>`
     : r && r.none ? '<div class="price" style="font-size:20px;color:var(--red)">אין טיסה ישירה מתאימה בתאריכים האלה</div>'
     : `<div class="price" style="font-size:20px;color:var(--mute)">⏳ ייבדק בבדיקה הבאה (עד חצי שעה)</div>`;
-  const leg = (lbl, d, x, url) => `<div>${lbl} ${dayName(d)} ${heD(d)}: ${x ? `<b>${ils(x.price)}</b>${usdTag(x.price)} · ${ltr(x.dep)} · ${x.air}` : '—'}${url ? ` · <a href="${url}" target="_blank">לראות בגוגל</a>` : ''}</div>`;
+  const leg = (lbl, d, x) => `<div>${lbl} ${dayName(d)} ${heD(d)}: ${x ? `<b>${ils(x.price)}</b>${usdTag(x.price)} · ${ltr(x.dep)} · ${x.air}` : '—'}</div>`;
   const img = ['MUC', 'ZRH', 'MXP'].includes(w.city) ? w.city : 'other';
   return `<div class="card ${hit ? 'hit' : ''}">
     <div class="photo" style="background-image:url(img/${img}.jpg)">
@@ -331,7 +342,8 @@ function card(w, can) {
     <div class="chg">${chg}${r && r.stale ? ' · <span class="up">חלק מהמחיר מבדיקה קודמת</span>' : ''}</div>
     ${low && h.length > 2 ? `<div class="low">הכי נמוך שראינו: <b>${ils(low.price)}</b> (${new Date(low.t).toLocaleDateString('he-IL')})</div>` : ''}
     ${spark(h)}
-    <div class="legs">${leg('🛫 הלוך', (r && r.outDate) || w.out, r && r.out, r && r.outUrl)}${leg('🛬 חזור', (r && r.backDate) || w.back, r && r.back, r && r.backUrl)}</div>
+    <div class="legs">${leg('🛫 הלוך', (r && r.outDate) || w.out, r && r.out)}${leg('🛬 חזור', (r && r.backDate) || w.back, r && r.back)}
+      <a class="gbtn" href="${gfRound((r && r.outDate) || w.out, (r && r.backDate) || w.back, CFG.origin || 'TLV', w.city)}" target="_blank">🔎 לראות הלוך-חזור בגוגל טיסות</a></div>
     ${can ? `<div class="tools">
       <button class="ghost" data-edit="${w.id}">✎ עריכה</button>
       <button class="ghost" data-del="${w.id}">🗑 מחיקה</button></div>` : ''}

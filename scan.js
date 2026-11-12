@@ -24,6 +24,14 @@ function tfs(date, from, to) {
   const inner = Buffer.concat([field(0x12, s(date)), Buffer.from([0x28, 0]), field(0x6a, field(0x12, s(from))), field(0x72, field(0x12, s(to)))]);
   return Buffer.concat([field(0x1a, inner), Buffer.from([0x42, 1, 1, 0x48, 1, 0x98, 1, 2])]).toString('base64');
 }
+// קישור לאנשים: הלוך-חזור, ישיר, בעברית
+function gfRound(o, b, from, to) {
+  const s = (t) => Buffer.from(t, 'utf8');
+  const f = (tag, buf) => Buffer.concat([Buffer.from([tag, buf.length]), buf]);
+  const leg = (d, a, c) => f(0x1a, Buffer.concat([f(0x12, s(d)), Buffer.from([0x28, 0]), f(0x6a, f(0x12, s(a))), f(0x72, f(0x12, s(c)))]));
+  const tfs = Buffer.concat([leg(o, from, to), leg(b, to, from), Buffer.from([0x42, 1, 1, 0x48, 1, 0x98, 1, 1])]).toString('base64');
+  return `https://www.google.com/travel/flights/search?tfs=${encodeURIComponent(tfs)}&hl=iw&gl=IL&curr=ILS`;
+}
 const gfUrl = (date, from, to) => `https://www.google.com/travel/flights/search?tfs=${encodeURIComponent(tfs(date, from, to))}&hl=en&curr=ILS`;
 
 function days(a, b) {
@@ -321,6 +329,7 @@ function message(alerts) {
     if (why === 'target') L.push(`✅ מתחת למחיר שקבעת (${ils(w.target)})!`);
     L.push(`🛫 הלוך ${he(od)}, ${a.dep} (${a.air}) — ${ils(a.price)}`);
     L.push(`🛬 חזור ${he(bd)}, ${b.dep} (${b.air}) — ${ils(b.price)}`);
+    L.push(`🔎 בגוגל טיסות: ${gfRound(od, bd, cfg.origin, w.city)}`);
     L.push('');
   }
   L.push('המחיר מ-Google Flights. לפני הזמנה — לבדוק באתר של החברה.');
