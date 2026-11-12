@@ -244,11 +244,16 @@ function hoursSel(id, r) {
   return `<label>מ-<select id="${id}F"><option value="">כל שעה</option>${Array.from({ length: 24 }, (_, i) => `<option value="${i}" ${f === i ? 'selected' : ''}>${hh(i)}</option>`).join('')}</select></label>
     <label>עד<select id="${id}T"><option value="">כל שעה</option>${Array.from({ length: 24 }, (_, i) => i + 1).map((i) => `<option value="${i}" ${t === i ? 'selected' : ''}>${hh(i)}</option>`).join('')}</select></label>`;
 }
-const FLEX = [[0, 'בדיוק בתאריך'], [0.25, '6 שעות'], [0.5, '12 שעות'], [1, 'יום'], [2, 'יומיים'], [3, '3 ימים']];
-const DIRS = [['both', 'לפני ואחרי'], ['before', 'רק לפני'], ['after', 'רק אחרי']];
-const flexText = (v, dir = 'both') => { const t = (FLEX.find((x) => x[0] === +v) || [0, `${v} ימים`])[1]; return dir === 'before' ? `${t} לפני` : dir === 'after' ? `${t} אחרי` : `± ${t}`; };
-const flexSel = (id, v, dir) => `<label>גמישות<select id="${id}" onchange="this.closest('.row').querySelector('[data-dir]').style.display = +this.value ? '' : 'none'">${FLEX.map(([n, t]) => `<option value="${n}" ${(+v || 0) === n ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
-  <label data-dir style="${+v ? '' : 'display:none'}">לאיזה כיוון<select id="${id}D">${DIRS.map(([k, t]) => `<option value="${k}" ${(dir || 'both') === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>`;
+const FLEX = [[0, 'בלי'], [0.25, '6 שעות'], [0.5, '12 שעות'], [1, 'יום'], [2, 'יומיים'], [3, '3 ימים']];
+const flexName = (v) => (FLEX.find((x) => x[0] === +v) || [0, `${v} ימים`])[1];
+// גמישות לפני ואחרי (בימים). תיקים ישנים: flexOut + כיוון
+const baOf = (w, leg) => {
+  const B = w[leg + 'Before'] ?? w['flex' + (leg === 'out' ? 'OutBefore' : 'BackBefore')], A = w['flex' + (leg === 'out' ? 'OutAfter' : 'BackAfter')];
+  if (B != null || A != null) return [+B || 0, +A || 0];
+  const f = +w[leg === 'out' ? 'flexOut' : 'flexBack'] || 0, d = w[leg === 'out' ? 'flexOutDir' : 'flexBackDir'] || 'both';
+  return [d === 'after' ? 0 : f, d === 'before' ? 0 : f];
+};
+const flexSel = (id, [b, a]) => ['B', 'A'].map((k, i) => `<label>${i ? 'גמישות אחרי' : 'גמישות לפני'}<select id="${id}${k}">${FLEX.map(([n, t]) => `<option value="${n}" ${([b, a][i] || 0) === n ? 'selected' : ''}>${t}</option>`).join('')}</select></label>`).join('');
 function tripForm(p, w = {}) {
   const airs = w.id ? airsOf(w) : ['El Al'];
   return `<div class="tf">
@@ -257,10 +262,10 @@ function tripForm(p, w = {}) {
       <label>להתריע מתחת ל-₪<input type="number" id="${p}Target" min="0" step="10" placeholder="למשל 1800" value="${w.target || ''}"></label>
     </div>
     <fieldset><legend>🛫 הלוך</legend><div class="row">
-      <label>תאריך<input type="date" id="${p}Out" value="${w.out || ''}"></label>${flexSel(p + 'FlexO', w.flexOut, w.flexOutDir)}
+      <label>תאריך<input type="date" id="${p}Out" value="${w.out || ''}"></label>${flexSel(p + 'FlexO', baOf(w, 'out'))}
       <span style="align-self:center;color:var(--mute);font-size:14px">שעת המראה:</span>${hoursSel(p + 'HO', w.outHours)}</div></fieldset>
     <fieldset><legend>🛬 חזור</legend><div class="row">
-      <label>תאריך<input type="date" id="${p}Back" value="${w.back || ''}"></label>${flexSel(p + 'FlexB', w.flexBack, w.flexBackDir)}
+      <label>תאריך<input type="date" id="${p}Back" value="${w.back || ''}"></label>${flexSel(p + 'FlexB', baOf(w, 'back'))}
       <span style="align-self:center;color:var(--mute);font-size:14px">שעת המראה:</span>${hoursSel(p + 'HB', w.backHours)}</div></fieldset>
     <fieldset><legend>✈️ חברות תעופה (טיסות ישירות) — בלי סימון = כל החברות</legend>
       <div class="chips">${AIRS.map(([k, he]) => `<label class="chip"><input type="checkbox" data-air="${p}" value="${k}" ${airs.includes(k) ? 'checked' : ''}> ${he}</label>`).join('')}</div></fieldset>
@@ -269,7 +274,7 @@ function tripForm(p, w = {}) {
 function readTrip(p) {
   const hrs = (id) => { const f = $(`#${id}F`).value, t = $(`#${id}T`).value; return f === '' && t === '' ? null : [f === '' ? 0 : +f, t === '' ? 24 : +t]; };
   return { out: $(`#${p}Out`).value, back: $(`#${p}Back`).value, target: +$(`#${p}Target`).value || null,
-    flexOut: +$(`#${p}FlexO`).value, flexBack: +$(`#${p}FlexB`).value, flexOutDir: $(`#${p}FlexOD`).value, flexBackDir: $(`#${p}FlexBD`).value, outHours: hrs(p + 'HO'), backHours: hrs(p + 'HB'),
+    flexOutBefore: +$(`#${p}FlexOB`).value, flexOutAfter: +$(`#${p}FlexOA`).value, flexBackBefore: +$(`#${p}FlexBB`).value, flexBackAfter: +$(`#${p}FlexBA`).value, outHours: hrs(p + 'HO'), backHours: hrs(p + 'HB'),
     airlines: [...document.querySelectorAll(`[data-air="${p}"]:checked`)].map((x) => x.value) };
 }
 function checkTrip(t) {
@@ -280,7 +285,9 @@ function checkTrip(t) {
 }
 function optsText(w) {
   const o = [];
-  if (w.flexOut || w.flexBack) o.push(`גמיש: ${[w.flexOut ? `הלוך ${flexText(w.flexOut, w.flexOutDir)}` : '', w.flexBack ? `חזור ${flexText(w.flexBack, w.flexBackDir)}` : ''].filter(Boolean).join(', ')}`);
+  const leg = (n, [b, a]) => (b || a) ? `${n}: ${[b ? `${flexName(b)} לפני` : '', a ? `${flexName(a)} אחרי` : ''].filter(Boolean).join(' ו')}` : '';
+  const f = [leg('הלוך', baOf(w, 'out')), leg('חזור', baOf(w, 'back'))].filter(Boolean);
+  if (f.length) o.push('גמיש — ' + f.join(' · '));
   if (w.outHours) o.push(`המראה בהלוך ${hh(w.outHours[0])}–${hh(w.outHours[1])}`);
   if (w.backHours) o.push(`המראה בחזור ${hh(w.backHours[0])}–${hh(w.backHours[1])}`);
   return o.join(' · ');
@@ -312,7 +319,7 @@ function card(w, can) {
       <div class="cap"><div class="city">${CFG.cities && CFG.cities[w.city] || w.city}</div><div class="air">${air}</div></div>
     </div>
     <div class="cb">
-    ${(() => { const o = (r && r.outDate) || w.out, b = (r && r.backDate) || w.back, flex = w.flexOut || w.flexBack;
+    ${(() => { const o = (r && r.outDate) || w.out, b = (r && r.backDate) || w.back, flex = [...baOf(w, 'out'), ...baOf(w, 'back')].some(Boolean);
       return `<div class="dates">📅 ${flex && r && r.outDate ? 'הכי זול: ' : ''}${dayName(o)} ${heD(o)} ← ${dayName(b)} ${heD(b)} · ${nights(o, b)} לילות</div>
       ${optsText(w) ? `<div class="opts">⚙️ ${optsText(w)}${flex ? ` · ביקשת ${heD(w.out)} ← ${heD(w.back)}` : ''}</div>` : ''}`; })()}
     ${status}
@@ -365,9 +372,9 @@ function bindCards() {
       const list = W.map((w) => {
         if (w.id !== b.dataset.esave) return w;
         const same = (k) => JSON.stringify(k === 'airlines' ? airsOf(w) : w[k] ?? null) === JSON.stringify(t[k] ?? null);
-        const moved = !['out', 'back', 'flexOut', 'flexBack', 'flexOutDir', 'flexBackDir', 'outHours', 'backHours', 'airlines'].every((k) => k === 'flexOut' || k === 'flexBack' ? (+w[k] || 0) === t[k] : k === 'flexOutDir' || k === 'flexBackDir' ? (w[k] || 'both') === t[k] : same(k));
+        const moved = !['out', 'back', 'outHours', 'backHours', 'airlines'].every(same) || JSON.stringify([...baOf(w, 'out'), ...baOf(w, 'back')]) !== JSON.stringify([t.flexOutBefore, t.flexOutAfter, t.flexBackBefore, t.flexBackAfter]);
         // טיסות אחרות = טיול חדש: מתחילים מעקב (וגרף) מחדש
-        const { airline, ...rest } = w;
+        const { airline, flexOut, flexBack, flexOutDir, flexBackDir, ...rest } = w;
         return { ...rest, ...t, id: moved ? 'w' + Date.now().toString(36) : w.id };
       });
       editT = null; await saveWatches(list);
@@ -455,7 +462,7 @@ $('#fAdd').onclick = async () => {
   const err = checkTrip(w);
   if (err) return m.textContent = err;
   if (w.out < new Date().toISOString().slice(0, 10)) return m.textContent = 'תאריך ההלוך כבר עבר.';
-  if (W.find((x) => x.city === w.city && x.out === w.out && x.back === w.back && JSON.stringify(airsOf(x)) === JSON.stringify(w.airlines) && (+x.flexOut || 0) === w.flexOut && (+x.flexBack || 0) === w.flexBack)) return m.textContent = 'הטיול הזה כבר במעקב.';
+  if (W.find((x) => x.city === w.city && x.out === w.out && x.back === w.back && JSON.stringify(airsOf(x)) === JSON.stringify(w.airlines) && JSON.stringify([...baOf(x, 'out'), ...baOf(x, 'back')]) === JSON.stringify([w.flexOutBefore, w.flexOutAfter, w.flexBackBefore, w.flexBackAfter]))) return m.textContent = 'הטיול הזה כבר במעקב.';
   $('#fAdd').disabled = true;
   m.className = 'msg'; m.textContent = 'שומר…';
   try {

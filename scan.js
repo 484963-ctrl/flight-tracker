@@ -93,9 +93,14 @@ async function scanOne(ctx, url) {
 // הטיסה הכי זולה שמתאימה לטיול: ישירה, ואם נבחרה חברה — רק שלה
 // --- אפשרויות של טיול: חברות, גמישות בתאריכים, שעות המראה ---
 const AIR_HE = { 'El Al': 'אל על', Israir: 'ישראייר', Arkia: 'ארקיע', Lufthansa: 'לופטהנזה', SWISS: 'סוויס', ITA: 'ITA', Austrian: 'אוסטריאן', 'Wizz Air': 'ויז אייר', easyJet: 'איזיג׳ט', Ryanair: 'ריינאייר', Aegean: 'אג׳יאן' };
+const cap = (v) => Math.min(3, Math.max(0, +v || 0));
+const ba = (val, flex, dir, side) => val != null ? cap(val) : (!dir || dir === 'both' || dir === side) ? cap(flex) : 0;
 function norm(w) {
   const airlines = Array.isArray(w.airlines) ? w.airlines : w.airline === 'elal' ? ['El Al'] : [];
-  return { ...w, airlines, flexOut: Math.min(3, Math.max(0, +w.flexOut || 0)), flexBack: Math.min(3, Math.max(0, +w.flexBack || 0)), outHours: w.outHours || null, backHours: w.backHours || null, flexOutDir: w.flexOutDir || 'both', flexBackDir: w.flexBackDir || 'both' };
+  return { ...w, airlines, flexOut: Math.min(3, Math.max(0, +w.flexOut || 0)), flexBack: Math.min(3, Math.max(0, +w.flexBack || 0)), outHours: w.outHours || null, backHours: w.backHours || null,
+    // כמה גמישות לפני התאריך ואחריו (בימים; 0.25 = 6 שעות). תיקים ישנים: flex + כיוון
+    outBefore: ba(w.flexOutBefore, w.flexOut, w.flexOutDir, 'before'), outAfter: ba(w.flexOutAfter, w.flexOut, w.flexOutDir, 'after'),
+    backBefore: ba(w.flexBackBefore, w.flexBack, w.flexBackDir, 'before'), backAfter: ba(w.flexBackAfter, w.flexBack, w.flexBackDir, 'after') };
 }
 const depHour = (dep) => { const m = /(\d{1,2}):(\d\d)\s*([AP])M/.exec(dep || ''); if (!m) return null; return (+m[1] % 12) + (m[3] === 'P' ? 12 : 0) + +m[2] / 60; };
 const inHours = (dep, r) => { if (!r) return true; const h = depHour(dep); return h != null && h >= r[0] && h < r[1]; };
@@ -103,16 +108,15 @@ const match = (w, hours) => (x) => x.stops === 'Nonstop'
   && (!w.airlines.length || w.airlines.some((a) => x.air.toLowerCase().includes(a.toLowerCase())))
   && inHours(x.dep, hours);
 const shift = (d, n) => { const t = new Date(d + 'T12:00:00Z'); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
-const around = (d, flex, dir = 'both') => { const today = new Date().toISOString().slice(0, 10); const o = []; for (let i = dir === 'after' ? 0 : -flex; i <= (dir === 'before' ? 0 : flex); i++) { const x = shift(d, i); if (x >= today) o.push(x); } return o; };
+const around = (d, before, after) => { const today = new Date().toISOString().slice(0, 10); const o = []; for (let i = -Math.ceil(before); i <= Math.ceil(after); i++) { const x = shift(d, i); if (x >= today) o.push(x); } return o; };
 // גמישות בשעות/ימים: flex בימים (0.25 = 6 שעות, 0.5 = 12 שעות). הטיסה צריכה להמריא
 // מ-flex לפני תחילת היום שנבחר ועד flex אחרי סופו
-// dir: 'both' (לפני ואחרי), 'before' (רק לפני), 'after' (רק אחרי)
-const inFlex = (d, base, flex, dep, dir = 'both') => {
-  if (!flex) return d === base;
+// הטיסה צריכה להמריא מ-before לפני תחילת היום שנבחר ועד after אחרי סופו (בימים)
+const inFlex = (d, base, before, after, dep) => {
+  if (!before && !after) return d === base;
   const h = depHour(dep); if (h == null) return false;
   const t = (new Date(d + 'T12:00:00Z') - new Date(base + 'T12:00:00Z')) / 36e5 + h;
-  const lo = dir === 'after' ? 0 : -flex * 24, hi = 24 + (dir === 'before' ? 0 : flex * 24);
-  return t >= lo && t < hi;
+  return t >= -before * 24 && t < 24 + after * 24;
 };
 const airLabel = (w) => !w.airlines.length ? 'כל החברות' : w.airlines.map((a) => AIR_HE[a] || a).join(', ');
 const pick = (res, fn) => (res || []).find(fn) || null; // res ממוין לפי מחיר
@@ -178,8 +182,8 @@ function saveChannelStatus() {
   const legs = {};
   const add = (from, to, date) => { legs[`${from}|${to}|${date}`] = { from, to, date, url: gfUrl(date, from, to) }; };
   for (const w of watches) {
-    for (const d of around(w.out, Math.ceil(w.flexOut), w.flexOutDir)) add(cfg.origin, w.city, d);
-    for (const d of around(w.back, Math.ceil(w.flexBack), w.flexBackDir)) add(w.city, cfg.origin, d);
+    for (const d of around(w.out, w.outBefore, w.outAfter)) add(cfg.origin, w.city, d);
+    for (const d of around(w.back, w.backBefore, w.backAfter)) add(w.city, cfg.origin, d);
   }
   const ov = cfg.overview;
   const overviewDue = ov && ov.on && (process.env.FULL || !prev.overviewAt || now - new Date(prev.overviewAt) > 20 * 3600e3);
@@ -235,8 +239,8 @@ function saveChannelStatus() {
   for (const w of watches) {
     // הצירוף הכי זול מכל התאריכים האפשריים (לפי הגמישות), בשעות ובחברות שנבחרו
     let best = null, anyMissing = false, allLoaded = true, options = 0;
-    const outs = around(w.out, Math.ceil(w.flexOut), w.flexOutDir).map((d) => { const A = merged[`${cfg.origin}|${w.city}|${d}`]; if (!A || A.status === 'FAIL') allLoaded = false; const m = match(w, w.outHours); return { d, A, f: A && pick(A.res, (x) => m(x) && inFlex(d, w.out, w.flexOut, x.dep, w.flexOutDir)) }; });
-    const backs = around(w.back, Math.ceil(w.flexBack), w.flexBackDir).map((d) => { const B = merged[`${w.city}|${cfg.origin}|${d}`]; if (!B || B.status === 'FAIL') allLoaded = false; const m = match(w, w.backHours); return { d, B, f: B && pick(B.res, (x) => m(x) && inFlex(d, w.back, w.flexBack, x.dep, w.flexBackDir)) }; });
+    const outs = around(w.out, w.outBefore, w.outAfter).map((d) => { const A = merged[`${cfg.origin}|${w.city}|${d}`]; if (!A || A.status === 'FAIL') allLoaded = false; const m = match(w, w.outHours); return { d, A, f: A && pick(A.res, (x) => m(x) && inFlex(d, w.out, w.outBefore, w.outAfter, x.dep)) }; });
+    const backs = around(w.back, w.backBefore, w.backAfter).map((d) => { const B = merged[`${w.city}|${cfg.origin}|${d}`]; if (!B || B.status === 'FAIL') allLoaded = false; const m = match(w, w.backHours); return { d, B, f: B && pick(B.res, (x) => m(x) && inFlex(d, w.back, w.backBefore, w.backAfter, x.dep)) }; });
     for (const o of outs) for (const k of backs) {
       if (k.d <= o.d || !o.f || !k.f) continue;
       options++;
