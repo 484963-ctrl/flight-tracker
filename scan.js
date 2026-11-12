@@ -61,6 +61,7 @@ function parse(text) {
       dep: clean(b[0]), arr: clean(b[2]),
       air: (b[3] || '').replace(/Operated by.*/, '').trim(),
       stops: b.find((x) => /Nonstop|\d stops?/.test(x)) || '',
+      route: (b.find((x) => /^[A-Z]{3}–[A-Z]{3}$/.test(x)) || ''),
       price: +L[i].replace(/[₪,]/g, ''),
     });
   }
@@ -161,34 +162,42 @@ async function waitList(p, max) {
 }
 // okOut/okBack: אילו טיסות מתאימות (חברה, שעות, גמישות, שבת). מחזיר את הצירוף הזול: מחיר כולל לכל הנוסעים
 async function rtSearch(ctx, o, b, from, to, pax, okOut, okBack) {
+  const log = [];
   const url = `https://www.google.com/travel/flights/search?tfs=${encodeURIComponent(tfsRT(o, b, from, to, pax))}&hl=en&curr=ILS`;
   for (let attempt = 0; attempt < 2; attempt++) {
     const p = await ctx.newPage();
     try {
       await p.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
       const t = await waitList(p, 30);
-      if (t === 'NONE') return { status: 'NONE' };
+      if (t === 'NONE') return { status: 'NONE', log };
       if (!t) throw new Error('לא נטען');
-      const outs = parse(t).filter(okOut).slice(0, 3);
-      if (!outs.length) return { status: 'NONE' };
+      const outs = parse(t).filter((x) => (!x.route || x.route === `${from}–${to}`) && okOut(x)).slice(0, 3);
+      log.push(`${o}/${b} הלוך: ${outs.map((x) => x.air + ' ' + x.dep + ' ₪' + x.price).join(', ') || 'אין'}`);
+      if (!outs.length) return { status: 'NONE', log };
       for (const c of outs) {
         const before = p.url();
         const item = p.locator('li').filter({ hasText: c.air.split(/[ ,]/)[0] }).filter({ hasText: c.dep.split(' ')[0] });
         if (!(await item.count())) continue;
         await item.first().click();
         await p.waitForURL((u) => u.toString() !== before, { timeout: 20000 }).catch(() => {});
-        const t2 = await waitList(p, 20);
-        if (t2 && t2 !== 'NONE') {
-          const back = parse(t2).filter(okBack)[0];
-          if (back) return { status: 'OK', price: back.price, out: { ...c, price: undefined }, back: { ...back, price: undefined } };
+        // מחכים שתופיע רשימת טיסות החזור (המסלול ההפוך)
+        let rows = [];
+        for (let i = 0; i < 20 && !rows.length; i++) {
+          await p.waitForTimeout(1500);
+          rows = parse(await p.evaluate(() => document.body.innerText)).filter((x) => x.route === `${to}–${from}`);
         }
+        await waitList(p, 6);
+        rows = parse(await p.evaluate(() => document.body.innerText)).filter((x) => x.route === `${to}–${from}`);
+        const back = rows.filter(okBack)[0];
+        log.push(`  נבחר ${c.air} ${c.dep} → חזור: ${rows.map((x) => x.air + ' ' + x.dep + ' ₪' + x.price).join(', ') || 'לא נטען'}`);
+        if (back) return { status: 'OK', price: back.price, out: { ...c, price: undefined }, back: { ...back, price: undefined }, log };
         await p.goBack({ waitUntil: 'domcontentloaded' }).catch(() => {});
         await waitList(p, 20);
       }
-      return { status: 'NONE' };
-    } catch { } finally { await p.close().catch(() => {}); }
+      return { status: 'NONE', log };
+    } catch (e) { log.push('שגיאה: ' + (e.message || e)); } finally { await p.close().catch(() => {}); }
   }
-  return { status: 'FAIL' };
+  return { status: 'FAIL', log };
 }
 
 let settings = {};
@@ -339,6 +348,7 @@ function saveChannelStatus() {
         const r = await rtSearch(rctx, pr.o.d, pr.k.d, cfg.origin, w.city, paxOf(w), pr.o.ok, pr.k.ok);
         process.stdout.write(r.status === 'OK' ? '.' : r.status === 'NONE' ? 'o' : 'x');
         plan[w.id].rt.push({ pr, r });
+        if (process.env.RT_LOG) console.log('\n' + (r.log || []).join('\n'));
       }
     }));
     await rtBrowser.close();
@@ -397,7 +407,8 @@ function saveChannelStatus() {
   }
 
   const fx = await getFx(prev.fx);
-  wr('data/latest.json', { updated: now.toISOString(), fx, ok: okCount, total: keys.length, overviewAt: overviewDue ? now.toISOString() : prev.overviewAt, legs: merged, watches: wOut });
+  const rtLog = Object.fromEntries(watches.map((w) => [w.id, (plan[w.id] ? plan[w.id].rt : []).flatMap((x) => [`[${x.r.status}${x.r.price ? ' ₪' + x.r.price : ''}]`, ...(x.r.log || [])])]));
+  wr('data/latest.json', { updated: now.toISOString(), fx, rtLog, ok: okCount, total: keys.length, overviewAt: overviewDue ? now.toISOString() : prev.overviewAt, legs: merged, watches: wOut });
   wr('data/watch-history.json', wHist);
   wr('data/state.json', state);
   console.log(`נבדקו ${okCount}/${keys.length}. התראות: ${alerts.length}`);
