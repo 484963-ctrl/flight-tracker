@@ -107,11 +107,17 @@ async function loadWatches() {
   } catch (e) { console.log('לא הצלחתי לטעון את הטיולים מהמסד, משתמש בקובץ:', e.message); }
 }
 
-// שער הדולר (יציג, מהבנק האירופי; גיבוי: exchangerate-api) — להצגת מחיר בדולרים באתר
+// שער הדולר להצגת מחיר בדולרים באתר: קודם שער השוק העדכני (מתעדכן כל דקה בשעות המסחר),
+// ואם הוא לא זמין — השער היציג של בנק ישראל, ואחריו הבנק המרכזי האירופי
 async function getFx(prevFx) {
   const tries = [
-    async () => { const d = await (await fetch('https://api.frankfurter.app/latest?from=USD&to=ILS', { redirect: 'follow' })).json(); return { rate: d.rates.ILS, date: d.date, src: 'הבנק המרכזי האירופי' }; },
-    async () => { const d = await (await fetch('https://open.er-api.com/v6/latest/USD')).json(); return { rate: d.rates.ILS, date: new Date(d.time_last_update_unix * 1000).toISOString().slice(0, 10), src: 'exchangerate-api' }; },
+    async () => {
+      const d = await (await fetch('https://query1.finance.yahoo.com/v8/finance/chart/ILS=X?interval=1m&range=1d', { headers: { 'User-Agent': 'Mozilla/5.0' } })).json();
+      const m = d.chart.result[0].meta;
+      return { rate: m.regularMarketPrice, t: new Date(m.regularMarketTime * 1000).toISOString(), src: 'שער השוק' };
+    },
+    async () => { const d = await (await fetch('https://boi.org.il/PublicApi/GetExchangeRate?key=USD')).json(); return { rate: d.currentExchangeRate, t: d.lastUpdate, src: 'שער יציג, בנק ישראל' }; },
+    async () => { const d = await (await fetch('https://api.frankfurter.app/latest?from=USD&to=ILS', { redirect: 'follow' })).json(); return { rate: d.rates.ILS, t: d.date + 'T14:00:00Z', src: 'הבנק המרכזי האירופי' }; },
   ];
   for (const t of tries) { try { const r = await t(); if (r.rate > 1 && r.rate < 10) return r; } catch {} }
   return prevFx || null;
