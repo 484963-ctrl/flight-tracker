@@ -12,7 +12,7 @@ const wr = (f, v) => fs.writeFileSync(path.join(ROOT, f), JSON.stringify(v));
 fs.mkdirSync(DATA, { recursive: true });
 
 const cfg = rd('config.json', {});
-let watches = rd('watches.json', []).map(norm); // נטען מחדש מהמסד בתחילת הריצה
+let watches = rd('watches.json', []); // נטען מחדש מהמסד בתחילת הריצה (ומנורמל אחרי שהפונקציות מוגדרות)
 const CITY = (c) => cfg.cities[c] || c;
 const AIR = { elal: 'El Al' };
 
@@ -164,6 +164,7 @@ function saveChannelStatus() {
 
 (async () => {
   await loadWatches();
+  watches = watches.map(norm);
   const now = new Date();
   const prev = rd('data/latest.json', {});
   const legsPrev = prev.legs || {};

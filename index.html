@@ -280,6 +280,8 @@ function readTrip(p) {
 function checkTrip(t) {
   if (!t.out || !t.back) return 'צריך לבחור תאריך הלוך ותאריך חזור.';
   if (t.back <= t.out) return 'תאריך החזור צריך להיות אחרי ההלוך.';
+  if (nights(t.out, t.back) > 60) return `בין ההלוך לחזור יש ${nights(t.out, t.back)} לילות — כדאי לבדוק את תאריך החזור (אולי השנה לא נכונה?).`;
+  if (nights(new Date().toISOString().slice(0, 10), t.back) > 330) return 'אפשר לבדוק מחירים רק עד כ-11 חודשים קדימה — חברות התעופה עוד לא פתחו טיסות לתאריך הזה.';
   for (const h of [t.outHours, t.backHours]) if (h && h[1] <= h[0]) return 'בשעות ההמראה: שעת הסיום צריכה להיות אחרי שעת ההתחלה.';
   return '';
 }
