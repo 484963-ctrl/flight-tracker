@@ -82,6 +82,7 @@
   a.crow:hover { background:var(--sky); }
   .crow.best { background:var(--greenbg); font-weight:700; }
   .crow .cp { font-weight:700; }
+  .crow .cu { display:block; font-size:11px; font-weight:500; color:var(--mute); }
   .crow .cd { color:var(--mute); font-size:12px; }
   .gbtn { display:block; text-align:center; margin-top:10px; padding:10px; border-radius:12px; background:var(--sky); color:var(--blue2) !important; font-weight:700; text-decoration:none; }
   .gbtn:hover { background:#dce8ff; }
@@ -365,7 +366,7 @@ function card(w, can) {
       .map((c) => { const star = c.city === cityNow && r && r.price != null;
         const air = c.outAir ? [...new Set([c.outAir, c.backAir].filter(Boolean))].join(' / ') : '';
         const inner = `<span class="cn">${star ? '⭐ ' : ''}${cname(c.city)}</span>
-          <span class="cp">${c.price != null ? ils(pc > 1 ? Math.round(c.price / pc) : c.price) : c.none ? '—' : '⏳'}</span>
+          <span class="cp">${c.price != null ? (() => { const v = pc > 1 ? Math.round(c.price / pc) : c.price; return ils(v) + (usd(v) ? `<span class="cu"><bdi dir="ltr">≈ ${usd(v)}</bdi></span>` : ''); })() : c.none ? '—' : '⏳'}</span>
           <span class="cd">${c.price != null ? `${dayName(c.outDate)} ${heD(c.outDate)} ← ${dayName(c.backDate)} ${heD(c.backDate)}${air ? ' · <bdi style="white-space:nowrap">' + air + '</bdi>' : ''}` : c.none ? 'אין טיסה ישירה מתאימה' : 'בודק…'}</span>`;
         return c.price != null ? `<a class="crow ${star ? 'best' : ''}" href="${gfRound(c.outDate, c.backDate, CFG.origin || 'TLV', c.city, px)}" target="_blank" title="לראות בגוגל טיסות">${inner}</a>` : `<div class="crow">${inner}</div>`; }).join('')}</div>` : '';
   return `<div class="card ${hit ? 'hit' : ''}">
