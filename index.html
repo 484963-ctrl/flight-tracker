@@ -60,6 +60,8 @@
   .dates { font-size:16px; font-weight:500; }
   .price { font-size:48px; font-weight:900; color:var(--blue); margin:6px 0 4px; line-height:1.05; letter-spacing:-1px; }
   .card.hit .price { color:var(--green); }
+  .tot { font-size:17px; margin:0 0 8px; color:var(--ink); }
+  .tot b { font-size:20px; }
   .usd { font-size:13px; font-weight:500; color:var(--mute); letter-spacing:0; white-space:nowrap; }
   .price .usd { font-size:18px; font-weight:600; margin-inline-start:6px; vertical-align:middle; }
   .stat .usd { color:#fff; opacity:.85; font-size:12px; }
@@ -71,6 +73,7 @@
   .up { color:var(--red); font-weight:700; }
   .legs { margin-top:12px; border-top:1px dashed var(--line); padding-top:10px; font-size:14px; line-height:1.9; }
   .legs a { color:var(--blue); }
+  .legs bdi { white-space:nowrap; }
   .gbtn { display:block; text-align:center; margin-top:10px; padding:10px; border-radius:12px; background:var(--sky); color:var(--blue2) !important; font-weight:700; text-decoration:none; }
   .gbtn:hover { background:#dce8ff; }
   .low { font-size:14px; color:var(--mute); margin-top:6px; }
@@ -330,12 +333,15 @@ function card(w, can) {
   else if (price != null && h.length) chg = 'ללא שינוי';
   const badge = !w.target ? '<span class="badge wait">בלי מחיר יעד — התראה על כל ירידה</span>'
     : hit ? `<span class="badge hit">✅ מתחת ליעד (${ils(w.target)})</span>`
-    : price != null ? `<span class="badge wait">יעד ${ils(w.target)}${usdTag(w.target)} · חסר עוד ${ils(price - w.target)}</span>`
+    : price != null ? `<span class="badge wait">יעד ${ils(w.target)}${pc > 1 ? ' לכולם' : ''}${usdTag(w.target)} · חסר עוד ${ils(price - w.target)}</span>`
     : `<span class="badge wait">יעד ${ils(w.target)}</span>`;
-  const status = price != null ? `<div class="price">${ils(price)}${usdTag(price)}</div>${pc > 1 ? `<div class="opts" style="margin-top:0">לכל ${pc} הנוסעים · בערך ${ils(Math.round(price / pc))} לנוסע</div>` : ''}`
+  const per = price != null ? Math.round(price / pc) : null;
+  const status = price != null ? (pc > 1
+      ? `<div class="price">${ils(per)}<span style="font-size:20px;font-weight:700"> לנוסע</span>${usdTag(per)}</div><div class="tot">לכל ${pc} הנוסעים: <b>${ils(price)}</b>${usdTag(price)}</div>`
+      : `<div class="price">${ils(price)}${usdTag(price)}</div>`)
     : r && r.none ? '<div class="price" style="font-size:20px;color:var(--red)">אין טיסה ישירה מתאימה בתאריכים האלה</div>'
     : `<div class="price" style="font-size:20px;color:var(--mute)">⏳ בודק עכשיו… המחיר יופיע תוך כמה דקות</div>`;
-  const leg = (lbl, d, x) => `<div>${lbl} ${dayName(d)} ${heD(d)}: ${x ? `<b>${ils(x.price)}</b>${usdTag(x.price)} · ${ltr(x.dep)} · ${x.air}` : '—'}</div>`;
+  const leg = (lbl, d, x) => `<div>${lbl} ${dayName(d)} ${heD(d)}: ${x ? `<b>${ils(x.price)}</b>${pc > 1 ? ' לכולם' : ''}${usdTag(x.price)} · ${ltr(x.dep)} · ${x.air}` : '—'}</div>`;
   const img = ['MUC', 'ZRH', 'MXP'].includes(w.city) ? w.city : 'other';
   return `<div class="card ${hit ? 'hit' : ''}">
     <div class="photo" style="background-image:url(img/${img}.jpg)">
