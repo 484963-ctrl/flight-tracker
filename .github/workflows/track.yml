@@ -58,7 +58,15 @@ jobs:
               for i in 1 2 3; do git pull -q --rebase -X ours origin main && git push -q && break; sleep 5; done
             fi
             [ $SECONDS -ge $end ] && break
-            sleep 1800
+            # מחכים חצי שעה — אבל בודקים כל דקה אם הוסיפו/שינו טיול באתר (או ביקשו הודעת בדיקה), ואז בודקים מיד
+            sig() { node -e 'const c=require("./config.json").supabase;Promise.all(["flight_get_watches","flight_get_settings"].map(f=>fetch(c.url+"/rest/v1/rpc/"+f,{method:"POST",headers:{apikey:c.key,"Content-Type":"application/json"},body:"{}"}).then(r=>r.text()))).then(a=>console.log(require("crypto").createHash("sha1").update(a.join("|")).digest("hex"))).catch(()=>console.log("x"))'; }
+            last=$(sig)
+            for i in $(seq 1 30); do
+              sleep 60
+              now=$(sig)
+              if [ "$now" != "x" ] && [ "$last" != "x" ] && [ "$now" != "$last" ]; then echo "שינוי באתר — בודק עכשיו"; break; fi
+              [ "$last" = "x" ] && last=$now
+            done
           done
       - name: הפעלה מחדש של השרשרת
         if: always()

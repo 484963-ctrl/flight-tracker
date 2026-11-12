@@ -334,7 +334,7 @@ function card(w, can) {
     : `<span class="badge wait">יעד ${ils(w.target)}</span>`;
   const status = price != null ? `<div class="price">${ils(price)}${usdTag(price)}</div>${pc > 1 ? `<div class="opts" style="margin-top:0">לכל ${pc} הנוסעים · בערך ${ils(Math.round(price / pc))} לנוסע</div>` : ''}`
     : r && r.none ? '<div class="price" style="font-size:20px;color:var(--red)">אין טיסה ישירה מתאימה בתאריכים האלה</div>'
-    : `<div class="price" style="font-size:20px;color:var(--mute)">⏳ ייבדק בבדיקה הבאה (עד חצי שעה)</div>`;
+    : `<div class="price" style="font-size:20px;color:var(--mute)">⏳ בודק עכשיו… המחיר יופיע תוך כמה דקות</div>`;
   const leg = (lbl, d, x) => `<div>${lbl} ${dayName(d)} ${heD(d)}: ${x ? `<b>${ils(x.price)}</b>${usdTag(x.price)} · ${ltr(x.dep)} · ${x.air}` : '—'}</div>`;
   const img = ['MUC', 'ZRH', 'MXP'].includes(w.city) ? w.city : 'other';
   return `<div class="card ${hit ? 'hit' : ''}">
@@ -451,7 +451,7 @@ async function saveSettings(next) {
 }
 $('#chTest').onclick = async () => {
   const m = $('#chMsg');
-  try { await saveSettings({ ...SET, testAt: new Date().toISOString() }); m.className = 'msg ok'; m.textContent = '✓ הודעת בדיקה תישלח לערוצים המסומנים בבדיקה הבאה (תוך חצי שעה).'; }
+  try { await saveSettings({ ...SET, testAt: new Date().toISOString() }); m.className = 'msg ok'; m.textContent = '✓ הודעת בדיקה תישלח לערוצים המסומנים תוך כמה דקות.'; }
   catch (e) { m.className = 'msg err'; m.textContent = e.message; }
 };
 
@@ -495,7 +495,7 @@ $('#fAdd').onclick = async () => {
   m.className = 'msg'; m.textContent = 'שומר…';
   try {
     await saveWatches([...W, w]);
-    m.className = 'msg ok'; m.textContent = '✓ נוסף! המחיר יופיע תוך חצי שעה, ומאז תקבל עדכון על כל ירידה.';
+    m.className = 'msg ok'; m.textContent = '✓ נוסף! המחיר יופיע תוך כמה דקות, ומאז תקבל עדכון על כל ירידה.';
     $('#fForm').innerHTML = tripForm('f'); bindAddForm();
   } catch (e) { m.className = 'msg err'; m.textContent = e.message; }
   $('#fAdd').disabled = false;
@@ -517,7 +517,9 @@ $('#delTok').onclick = () => { setCode(''); $('#tokMsg').textContent = 'יצאת
 
 load();
 let tick = 0;
-setInterval(() => { tick++; if (tick % 5 === 0 && !editT) load(); }, 60 * 1000);
+// טיול בלי מחיר (חדש או ששונה) — מרעננים כל 20 שניות עד שהמחיר מגיע; אחרת כל 5 דקות
+const waiting = () => W.some((w) => { const r = (L.watches || {})[w.id]; return !r || (r.price == null && !r.none); });
+setInterval(() => { tick++; if (editT) return; if (waiting() || tick % 15 === 0) load(); }, 20 * 1000);
 </script>
 </body>
 </html>
