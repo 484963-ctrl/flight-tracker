@@ -383,7 +383,7 @@ function readTrip(p) {
     flexOutBefore: +$(`#${p}FlexOB`).value, flexOutAfter: +$(`#${p}FlexOA`).value, flexBackBefore: +$(`#${p}FlexBB`).value, flexBackAfter: +$(`#${p}FlexBA`).value, outHours: hrs(p + 'HO'), backHours: hrs(p + 'HB'),
     airlines: [...document.querySelectorAll(`[data-air="${p}"]:checked`)].map((x) => x.value), noShabbat: $(`#${p}NoSh`).checked,
     pax: { adults: +$(`#${p}PA`).value, children: +$(`#${p}PC`).value, infants: +$(`#${p}PI`).value },
-    cities: [...document.querySelectorAll(`[data-city="${p}"]:checked`)].map((x) => x.value),
+    cities: [...new Set([...document.querySelectorAll(DEST[p] ? `#${p}DAir [data-city="${p}"]:checked` : `#${p}Chips [data-city="${p}"]:checked`)].map((x) => x.value))],
     dest: DEST[p] ? { name: DEST[p].name, lat: DEST[p].lat, lon: DEST[p].lon, hours: DEST[p].hours } : null,
     drive: DEST[p] ? Object.fromEntries(Object.entries(DEST[p].drive).filter(([, t]) => t <= DEST[p].hours * 3600)) : null };
 }

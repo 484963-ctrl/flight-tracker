@@ -169,7 +169,13 @@ function gridDate(txt, near) { // "Aug 19" → YYYY-MM-DD, השנה הקרובה
   for (const yy of [y - 1, y, y + 1]) { const d = new Date(Date.UTC(yy, MON[m[1]], +m[2], 12)); if (!best || Math.abs(d - new Date(near + 'T12:00:00Z')) < Math.abs(best - new Date(near + 'T12:00:00Z'))) best = d; }
   return best.toISOString().slice(0, 10);
 }
+const gridMemo = {};
 async function gridSearch(ctx, o, b, from, to, pax) {
+  const key = [o, b, from, to, JSON.stringify(pax)].join('|');
+  if (!gridMemo[key]) gridMemo[key] = gridSearch1(ctx, o, b, from, to, pax);
+  return gridMemo[key];
+}
+async function gridSearch1(ctx, o, b, from, to, pax) {
   const url = `https://www.google.com/travel/flights/search?tfs=${encodeURIComponent(tfsRT(o, b, from, to, pax))}&hl=en&curr=ILS`;
   for (let attempt = 0; attempt < 2; attempt++) {
     const p = await ctx.newPage();
@@ -283,7 +289,7 @@ function saveChannelStatus() {
   await loadWatches();
   watches = watches.map(norm);
   // כמה יעדים בטיול אחד (למשל לטירול: מינכן, אינסברוק, מילאנו, ונציה) — כל יעד נבדק בנפרד, והזול נבחר
-  const citiesOf = (w) => (Array.isArray(w.cities) && w.cities.length ? w.cities : [w.city]).filter(Boolean);
+  const citiesOf = (w) => [...new Set((Array.isArray(w.cities) && w.cities.length ? w.cities : [w.city]).filter(Boolean))];
   const subs = watches.flatMap((w) => citiesOf(w).map((c) => ({ ...w, city: c, id: citiesOf(w).length > 1 ? `${w.id}@${c}` : w.id, parent: w.id })));
   const now = new Date();
   const prev = rd('data/latest.json', {});
@@ -386,7 +392,7 @@ function saveChannelStatus() {
     const rtBrowser = await chromium.launch(process.env.CHROME_FULL ? { executablePath: process.env.CHROME_FULL, args: ['--headless=new'] } : { channel: 'chromium' });
     const rctx = await rtBrowser.newContext({ locale: 'en-US' });
     let wi = 0;
-    await Promise.all(Array.from({ length: 2 }, async () => {
+    await Promise.all(Array.from({ length: +(process.env.RT_PARALLEL || 4) }, async () => {
       while (wi < needRt.length) {
         const w = needRt[wi++], P = plan[w.id], px = paxOf(w);
         let order = P.allDates; // [{o,k}] כל הצירופים בטווח
@@ -402,7 +408,7 @@ function saveChannelStatus() {
         let best = null, tries = 0;
         for (const x of order) {
           if (best && x.g != null && x.g >= best.r.price) break;  // גם המחיר בלי הגבלות לא זול יותר — סיימנו
-          if (++tries > +(cfg.rtTries || 6)) { P.capped = true; break; }
+          if (++tries > +(cfg.rtTries || 4)) { P.capped = true; break; }
           const r = await rtSearch(rctx, x.o.d, x.k.d, cfg.origin, w.city, px, x.o.ok, x.k.ok);
           process.stdout.write(r.status === 'OK' ? '.' : r.status === 'NONE' ? 'o' : 'x');
           P.rt.push({ pr: x, r });
@@ -444,6 +450,24 @@ function saveChannelStatus() {
                    none: res.every((x) => x.r.none) };
     w.city = top.city;
     const price = wOut[w.id].price, a = wOut[w.id].out, b = wOut[w.id].back, isRt = wOut[w.id].rt;
+    // בדיקה ראשונה של טיול חדש (או ששונה) הסתיימה — הודעה עם התוצאה
+    const st0 = (state[w.id] = state[w.id] || {});
+    if (!st0.firstDone && st0.last != null) st0.firstDone = 'before'; // טיול שכבר נבדק בעבר — בלי הודעה
+    if (!st0.firstDone && (price != null || wOut[w.id].none)) {
+      st0.firstDone = now.toISOString();
+      const pn = paxCount(paxOf(w));
+      const L = [`✅ הבדיקה הראשונה הסתיימה: ${w.dest ? '🎯 ' + w.dest.name : CITY(w.city)}`];
+      if (price == null) L.push('לא נמצאה טיסה ישירה שמתאימה להגדרות שלך בתאריכים האלה.');
+      else {
+        L.push(`הכי זול: ${CITY(w.city)} — ${ils(price)}${pn > 1 ? ` לכל ${pn} הנוסעים (${ils(Math.round(price / pn))} לנוסע)` : ''}`);
+        L.push(`🛫 ${he(wOut[w.id].outDate)} ${a.dep} (${a.air}) · 🛬 ${he(wOut[w.id].backDate)} ${b.dep} (${b.air})`);
+        const cs = (wOut[w.id].cities || []).filter((c) => c.price != null && c.city !== w.city).sort((x, y) => x.price - y.price);
+        if (cs.length) L.push('ושאר היעדים: ' + cs.map((c) => `${CITY(c.city)} ${ils(pn > 1 ? Math.round(c.price / pn) : c.price)}`).join(' · ') + (pn > 1 ? ' (לנוסע)' : ''));
+      }
+      L.push('מעכשיו: בדיקה כל חצי שעה, והודעה על כל ירידה.');
+      if (process.env.PAGE_URL) L.push(process.env.PAGE_URL);
+      notes.push(L.join('\n'));
+    }
     if (price == null) continue;
     const h = (wHist[w.id] = wHist[w.id] || []);
     if (!h.length || h[h.length - 1].price !== price) h.push({ t: now.toISOString(), price });
@@ -475,8 +499,8 @@ function saveChannelStatus() {
       const t = w.target ? (r && r.price != null && r.price <= w.target ? ` ✅ מתחת ליעד (${ils(w.target)})` : ` · יעד ${ils(w.target)}`) : '';
       const dd = r && r.outDate ? `${he(r.outDate)} – ${he(r.backDate)}` : `${he(w.out)} – ${he(w.back)}`;
       const pp = paxOf(w), pn = paxCount(pp);
-      const many = Array.isArray(w.cities) && w.cities.length > 1;
-      L.push(`${CITY(w.city)}${many ? ` (הזול מבין ${w.cities.length} יעדים)` : ''} ${dd}${pn > 1 ? ` (${pn} נוסעים)` : ''}: ${p}${t}`);
+      const nC = citiesOf(w).length, many = nC > 1;
+      L.push(`${CITY(w.city)}${many ? ` (הזול מבין ${nC} יעדים)` : ''} ${dd}${pn > 1 ? ` (${pn} נוסעים)` : ''}: ${p}${t}`);
     }
     L.push('', 'המערכת בודקת כל חצי שעה ותשלח הודעה על כל ירידה.');
     if (process.env.PAGE_URL) L.push(process.env.PAGE_URL);
@@ -507,7 +531,7 @@ function message(alerts) {
   const L = [];
   for (const { w, price, a, b, rt, od, bd, why, from } of alerts) {
     L.push(`🔔 ${CITY(w.city)} — ${airLabel(w)} (ישיר) · ${paxText(paxOf(w))}`);
-    if (Array.isArray(w.cities) && w.cities.length > 1) L.push(`(הזול מבין: ${w.cities.map(CITY).join(', ')})`);
+    if (Array.isArray(w.cities) && new Set(w.cities).size > 1) L.push(`(הזול מבין: ${[...new Set(w.cities)].map(CITY).join(', ')})`);
     L.push(from != null ? `המחיר ירד מ-${ils(from)} ל-${ils(price)}` : `המחיר עכשיו: ${ils(price)}`);
     if (why === 'target') L.push(`✅ מתחת למחיר שקבעת (${ils(w.target)})!`);
     L.push(`🛫 הלוך ${he(od)}, ${a.dep} (${a.air})${rt ? '' : ` — ${ils(a.price)}`}`);
