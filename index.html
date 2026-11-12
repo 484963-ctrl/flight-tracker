@@ -420,7 +420,7 @@ function renderStats() {
   const hits = prices.filter((x) => x.w.target && x.p.price <= x.w.target).length;
   $('#stats').innerHTML = `
     <div class="stat"><b>${W.length}</b><span>טיולים במעקב</span></div>
-    ${best ? `<div class="stat"><b>${ils(best.p.price)}${usdTag(best.p.price)}</b><span>הכי זול · ${CFG.cities[best.w.city] || best.w.city}</span></div>` : ''}
+    ${best ? `<div class="stat"><b>${ils(Math.round(best.p.price / paxCount(paxOf(best.w))))}${usdTag(Math.round(best.p.price / paxCount(paxOf(best.w))))}</b><span>הכי זול${paxCount(paxOf(best.w)) > 1 ? ' לנוסע' : ''} · ${CFG.cities[best.w.city] || best.w.city}</span></div>` : ''}
     <div class="stat"><b>${hits}</b><span>מתחת למחיר שקבעת</span></div>`;
 }
 
@@ -520,6 +520,19 @@ $('#saveTok').onclick = async () => {
 };
 $('#tok').onkeydown = (e) => { if (e.key === 'Enter') $('#saveTok').click(); };
 $('#delTok').onclick = () => { setCode(''); $('#tokMsg').textContent = 'יצאת ממצב עריכה.'; render(); };
+
+// גרסה חדשה של האתר? טוענים אותה לבד (בלי Ctrl+F5)
+async function checkNewVersion() {
+  try {
+    const base = location.origin + location.pathname;
+    const [mine, server] = await Promise.all([fetch(base, { cache: 'force-cache' }).then((r) => r.text()), fetch(base + '?v=' + Date.now(), { cache: 'no-store' }).then((r) => r.text())]);
+    if (server.length > 1000 && mine !== server && !editT && !document.activeElement.matches('input,select')) {
+      await fetch(base, { cache: 'reload' }); location.reload();
+    }
+  } catch {}
+}
+checkNewVersion();
+setInterval(checkNewVersion, 3 * 60 * 1000);
 
 load();
 let tick = 0;
