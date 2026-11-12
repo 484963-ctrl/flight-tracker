@@ -110,6 +110,14 @@ async function loadWatches() {
   const legsPrev = prev.legs || {};
   const wHist = rd('data/watch-history.json', {});
   const state = rd('data/state.json', {});
+  const sys = (state._sys = state._sys || {});
+  const notes = []; // הודעות מערכת: פער בבדיקות, סיכום בוקר
+  // הבדיקות נעצרו לזמן ארוך? מודיעים שחזרו לעבוד
+  if (prev.updated && now - new Date(prev.updated) > 90 * 60e3 && sys.gapFor !== prev.updated) {
+    const h = Math.round((now - new Date(prev.updated)) / 36e5 * 10) / 10;
+    notes.push(`⚠️ הבדיקות של המחירים לא רצו ${h} שעות (תקלה אצל GitHub). עכשיו הן חזרו לעבוד.`);
+    sys.gapFor = prev.updated;
+  }
 
   // אילו חיפושים צריך: שני כיוונים לכל טיול, ופעם ביום גם סקירת כל התאריכים
   const legs = {};
@@ -142,7 +150,16 @@ async function loadWatches() {
   const merged = { ...legsPrev };
   for (const [k, r] of Object.entries(legs)) merged[k] = r.status === 'FAIL' && legsPrev[k] && legsPrev[k].res.length ? { ...legsPrev[k], stale: true } : r;
   const okCount = Object.values(legs).filter((r) => r.status === 'OK').length;
-  if (keys.length && okCount < keys.length * 0.3) { console.log(`רק ${okCount}/${keys.length} נטענו — לא שומרים`); return; }
+  if (keys.length && okCount < keys.length * 0.3) {
+    console.log(`רק ${okCount}/${keys.length} נטענו — לא שומרים`);
+    sys.fails = (sys.fails || 0) + 1;
+    if (sys.fails === 3) notes.push('⚠️ שלוש בדיקות ברצף לא הצליחו לקרוא מחירים מגוגל. ממשיכים לנסות כל חצי שעה — אודיע כשזה יסתדר.');
+    wr('data/state.json', state);
+    if (notes.length) await notify.send(notes.join('\n\n'));
+    return;
+  }
+  if (sys.fails >= 3) notes.push('✅ קריאת המחירים מגוגל חזרה לעבוד.');
+  sys.fails = 0;
 
   const alerts = [];
   const wOut = {};
@@ -167,7 +184,25 @@ async function loadWatches() {
     if (w.target) s.under = under ? true : price > w.target + minDrop ? false : s.under;
     s.last = price;
   }
-  for (const id of Object.keys(state)) if (!watches.find((w) => w.id === id)) delete state[id];
+  for (const id of Object.keys(state)) if (id !== '_sys' && !watches.find((w) => w.id === id)) delete state[id];
+
+  // סיכום בוקר (מ-8:00 שעון ישראל, פעם ביום) — גם סימן שהמערכת חיה
+  const il = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false }).formatToParts(now);
+  const ilDate = `${il.find((x) => x.type === 'year').value}-${il.find((x) => x.type === 'month').value}-${il.find((x) => x.type === 'day').value}`;
+  const ilHour = +il.find((x) => x.type === 'hour').value % 24;
+  if (ilHour >= 8 && sys.daily !== ilDate && watches.length) {
+    const L = ['☀️ בוקר טוב! המחירים של הטיולים שלך הבוקר:', ''];
+    for (const w of watches) {
+      const r = wOut[w.id];
+      const p = r && r.price != null ? ils(r.price) : 'אין מחיר כרגע';
+      const t = w.target ? (r && r.price != null && r.price <= w.target ? ` ✅ מתחת ליעד (${ils(w.target)})` : ` · יעד ${ils(w.target)}`) : '';
+      L.push(`${CITY(w.city)} ${he(w.out)} – ${he(w.back)}: ${p}${t}`);
+    }
+    L.push('', 'המערכת בודקת כל חצי שעה ותשלח הודעה על כל ירידה.');
+    if (process.env.PAGE_URL) L.push(process.env.PAGE_URL);
+    notes.push(L.join('\n'));
+    sys.daily = ilDate;
+  }
 
   wr('data/latest.json', { updated: now.toISOString(), ok: okCount, total: keys.length, overviewAt: overviewDue ? now.toISOString() : prev.overviewAt, legs: merged, watches: wOut });
   wr('data/watch-history.json', wHist);
@@ -175,7 +210,8 @@ async function loadWatches() {
   console.log(`נבדקו ${okCount}/${keys.length}. התראות: ${alerts.length}`);
 
   if (alerts.length) await notify.send(message(alerts));
-  else if (process.env.TEST_NOTIFY) await notify.send('✈️ בדיקה: מעקב הטיסות מחובר ועובד.\nתקבל הודעה כשמחיר של טיול שלך יירד מתחת למחיר היעד.' + (process.env.PAGE_URL ? '\n\n' + process.env.PAGE_URL : ''));
+  if (notes.length) await notify.send(notes.join('\n\n'));
+  if (!alerts.length && process.env.TEST_NOTIFY) await notify.send('✈️ בדיקה: מעקב הטיסות מחובר ועובד.\nתקבל הודעה על כל ירידה במחיר של טיול שלך, וסיכום כל בוקר.' + (process.env.PAGE_URL ? '\n\n' + process.env.PAGE_URL : ''));
 })();
 
 const DAY = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'שבת'];
