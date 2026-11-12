@@ -312,6 +312,7 @@ async function destCompute(p, lat, lon, name) {
     const r = await fetch(`https://router.project-osrm.org/table/v1/driving/${coords}?sources=0&annotations=duration`).then((x) => x.json()).catch(() => null);
     if (!r || r.code !== 'Ok') { m.className = 'msg err'; m.textContent = 'שירות זמני הנסיעה לא ענה, נסו שוב בעוד רגע.'; return; }
     cand.forEach(([c], i) => { const t = r.durations[0][i + 1]; if (t != null) drive[c] = Math.round(t); });
+    var snap = r.sources && r.sources[0] && r.sources[0].distance;
   }
   DEST[p] = { name, lat, lon, hours, drive };
   $(`#${p}Chips`).style.display = 'none';
@@ -319,6 +320,7 @@ async function destCompute(p, lat, lon, name) {
   $(`#${p}DAir`).innerHTML = destList(p);
   const n = Object.values(drive).filter((t) => t <= hours * 3600).length;
   m.className = 'msg ok'; m.textContent = `✓ ${name}: נמצאו ${n} שדות תעופה עד ${hours} שעות נסיעה. אפשר לפתוח את הרשימה ולהוריד סימון.`;
+  if (typeof snap === 'number' && snap > 2000) { m.className = 'msg err'; m.textContent += ` ⚠️ הנקודה רחוקה ${Math.round(snap / 1000)} ק״מ מהכביש הקרוב — אולי נבחר מקום לא מדויק. כדאי לנסות שם אחר או קישור מגוגל מפות.`; }
 }
 async function destFind(p) {
   const q = $(`#${p}DQ`).value.trim(), m = $(`#${p}DMsg`);
@@ -331,7 +333,14 @@ async function destFind(p) {
   }
   if (/goo\.gl|maps\.app/.test(q)) { m.className = 'msg err'; m.textContent = 'זה קישור מקוצר. פותחים אותו, ומעתיקים את הכתובת המלאה משורת הכתובת של הדפדפן.'; return; }
   m.className = 'msg'; m.textContent = '🔎 מחפש…';
-  const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=5&accept-language=he&q=${encodeURIComponent(q)}`).then((x) => x.json()).catch(() => null);
+  let res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=8&accept-language=he&q=${encodeURIComponent(q)}`).then((x) => x.json()).catch(() => null);
+  // עדיפות ליישוב עצמו (כפר/עיר) על פני "גבול שטח" של מועצה — שמרכזו יכול להיות בהרים, רחוק מכביש
+  if (res) {
+    const rank = (x) => (x.class === 'place' || ['city', 'town', 'village', 'hamlet', 'suburb'].includes(x.addresstype) && x.class !== 'boundary') ? 0 : x.class === 'boundary' ? 2 : 1;
+    res.sort((a, b) => rank(a) - rank(b) || (b.importance || 0) - (a.importance || 0));
+    const seen = new Set();
+    res = res.filter((x) => { const k = x.display_name; if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 5);
+  }
   if (!res || !res.length) { m.className = 'msg err'; m.textContent = 'לא מצאתי מקום כזה. נסו לכתוב באנגלית, או להדביק קישור מגוגל מפות.'; return; }
   if (res.length === 1) return destCompute(p, +res[0].lat, +res[0].lon, res[0].display_name.split(',')[0]);
   m.className = 'msg'; m.innerHTML = 'איזה מהם? ' + res.map((x, i) => `<button type="button" data-dpick="${p}" data-lat="${x.lat}" data-lon="${x.lon}" data-nm="${x.display_name.split(',')[0].replace(/"/g, '')}" style="margin:4px">${x.display_name.split(',').slice(0, 3).join(',')}</button>`).join('');
