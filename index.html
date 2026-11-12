@@ -336,7 +336,7 @@ function renderStats() {
 const SECRETS = 'https://github.com/484963-ctrl/flight-tracker/settings/secrets/actions/new';
 const CHN = {
   telegram: { name: '✈️ טלגרם', how: `1. ב-<a href="https://t.me/BotFather" target="_blank">BotFather</a> שולחים <code>/newbot</code> ומקבלים קוד.<br>2. שומרים אותו <a href="${SECRETS}" target="_blank">כאן</a> בשם <code>TELEGRAM_TOKEN</code>.<br>3. שולחים לבוט החדש "שלום".` },
-  whatsapp: { name: '💬 וואטסאפ', how: `1. שומרים באנשי הקשר את <bdi dir="ltr"><b>+34 621 062 163</b></bdi> (CallMeBot).<br>2. שולחים לו בוואטסאפ: <code>I allow callmebot to send me messages</code> ומקבלים APIKEY.<br>3. <a href="${SECRETS}" target="_blank">כאן</a> שומרים <code>WHATSAPP_PHONE</code> (למשל <bdi dir="ltr">+972501234567</bdi>) ו-<code>WHATSAPP_APIKEY</code>.<br>שירות חינמי, לפעמים לא זמין.` },
+  whatsapp: { name: '💬 וואטסאפ', how: `<b>דרך TextMeBot:</b><br>1. ב-<a href="https://textmebot.com/" target="_blank">textmebot.com</a> לוחצים "בקשת ApiKey" ומקבלים מפתח במייל.<br>2. לפי הקישור במייל מחברים וואטסאפ (סריקת קוד).<br>3. <a href="${SECRETS}" target="_blank">כאן</a> שומרים <code>TEXTMEBOT_APIKEY</code> (המפתח), ו-<code>WHATSAPP_TO</code> — המספר שמקבל את ההודעות (למשל <bdi dir="ltr">+972501234567</bdi>; כמה מספרים — מפרידים בפסיק).<br>עדיף שהמספר שמקבל יהיה אחר מהמספר שחובר — אחרת ההודעה נכנסת ל"הודעה לעצמי" ולא מצלצלת.` },
   email: { name: '📧 מייל', how: `1. ב-Gmail צריך אימות דו-שלבי, ואז <a href="https://myaccount.google.com/apppasswords" target="_blank">סיסמת אפליקציה</a> (16 אותיות).<br>2. <a href="${SECRETS}" target="_blank">כאן</a> שומרים <code>MAIL_USER</code> (כתובת ה-Gmail) ו-<code>MAIL_PASS</code> (סיסמת האפליקציה).<br>3. רשות: <code>MAIL_TO</code> — לשלוח לכתובת אחרת.` },
 };
 function renderChannels(can) {

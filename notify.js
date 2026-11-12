@@ -26,6 +26,19 @@ async function telegram(text) {
 }
 
 async function whatsapp(text) {
+  // TextMeBot: נשלח מהוואטסאפ שחובר אצלם, לכל המספרים ב-WHATSAPP_TO (מופרדים בפסיק)
+  if (E.TEXTMEBOT_APIKEY) {
+    const to = (E.WHATSAPP_TO || E.WHATSAPP_PHONE || '').split(',').map((x) => x.trim()).filter(Boolean);
+    if (!to.length) return 'וואטסאפ: חסר WHATSAPP_TO';
+    const res = [];
+    for (const n of to) {
+      const u = `https://api.textmebot.com/send.php?recipient=${encodeURIComponent(n)}&apikey=${encodeURIComponent(E.TEXTMEBOT_APIKEY)}&text=${encodeURIComponent(text)}`;
+      const r = await fetch(u);
+      const body = await r.text();
+      res.push(r.ok && !/error|invalid/i.test(body) ? 'נשלח' : 'שגיאה ' + r.status + ' ' + body.slice(0, 80));
+    }
+    return 'וואטסאפ: ' + res.join(', ');
+  }
   if (!E.WHATSAPP_PHONE || !E.WHATSAPP_APIKEY) return 'וואטסאפ: לא הוגדר';
   const u = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(E.WHATSAPP_PHONE)}&text=${encodeURIComponent(text)}&apikey=${encodeURIComponent(E.WHATSAPP_APIKEY)}`;
   const r = await fetch(u);
@@ -44,7 +57,7 @@ async function email(text) {
 // אילו ערוצים מחוברים (יש להם סודות ב-GitHub) — מוצג באתר
 const configured = () => ({
   telegram: !!E.TELEGRAM_TOKEN,
-  whatsapp: !!(E.WHATSAPP_PHONE && E.WHATSAPP_APIKEY),
+  whatsapp: !!(E.TEXTMEBOT_APIKEY || (E.WHATSAPP_PHONE && E.WHATSAPP_APIKEY)),
   email: !!(E.MAIL_USER && E.MAIL_PASS),
 });
 
