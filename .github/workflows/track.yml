@@ -1,7 +1,9 @@
 name: מעקב מחירים
+# ריצה אחת נמשכת כ-5.5 שעות ובודקת כל חצי שעה, ובסוף מפעילה את עצמה מחדש.
+# (ההרצות המתוזמנות של GitHub לא אמינות — הן רק גיבוי, למקרה שהשרשרת נעצרה.)
 on:
   schedule:
-    - cron: "7,37 * * * *"   # כל חצי שעה
+    - cron: "7 */2 * * *"
   workflow_dispatch:
     inputs:
       test_notify:
@@ -10,11 +12,12 @@ on:
         default: false
 permissions:
   contents: write
+  actions: write
 concurrency: { group: scan, cancel-in-progress: false }
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -23,11 +26,10 @@ jobs:
       - name: התקנת הדפדפן
         run: |
           npx playwright install chromium
-          # תלויות מערכת — אם השרת של אובונטו לא זמין, ממשיכים (רוב הספריות כבר מותקנות במכונה)
           timeout 300 npx playwright install-deps chromium || echo "install-deps נכשל, ממשיכים"
-      - run: node scan.js
+      - name: בדיקה כל חצי שעה
         env:
-          TEST_NOTIFY: ${{ inputs.test_notify && '1' || '' }}
+          FIRST_TEST: ${{ inputs.test_notify && '1' || '' }}
           PAGE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -36,11 +38,25 @@ jobs:
           MAIL_USER: ${{ secrets.MAIL_USER }}
           MAIL_PASS: ${{ secrets.MAIL_PASS }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
-      - name: שמירת הנתונים
         run: |
           git config user.name "flight-bot"
           git config user.email "flight-bot@users.noreply.github.com"
-          git add data
-          git diff --cached --quiet || git commit -m "עדכון מחירים"
-          git pull --rebase -X ours origin ${{ github.ref_name }} || true
-          git push
+          end=$((SECONDS + 5*3600 + 20*60))
+          first=1
+          while :; do
+            echo "=== בדיקה $(date -u +%H:%M) UTC"
+            TEST_NOTIFY=$([ -n "$first" ] && echo "$FIRST_TEST") node scan.js || echo "הבדיקה נכשלה, ממשיכים"
+            first=
+            git add data watches.json
+            if ! git diff --cached --quiet; then
+              git commit -q -m "עדכון מחירים"
+              for i in 1 2 3; do git pull -q --rebase -X ours origin main && git push -q && break; sleep 5; done
+            fi
+            [ $SECONDS -ge $end ] && break
+            sleep 1800
+          done
+      - name: הפעלה מחדש של השרשרת
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run track.yml --ref main
