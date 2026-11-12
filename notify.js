@@ -31,7 +31,8 @@ async function whatsapp(text) {
     const to = (E.WHATSAPP_TO || E.WHATSAPP_PHONE || '').split(',').map((x) => x.trim()).filter(Boolean);
     if (!to.length) return 'וואטסאפ: חסר WHATSAPP_TO';
     const res = [];
-    for (const n of to) {
+    for (const [i, n] of to.entries()) {
+      if (i) await new Promise((r) => setTimeout(r, 6000)); // לפחות 5 שניות בין הודעות — המלצת TextMeBot כדי שוואטסאפ לא יחסום
       const u = `https://api.textmebot.com/send.php?recipient=${encodeURIComponent(n)}&apikey=${encodeURIComponent(E.TEXTMEBOT_APIKEY)}&text=${encodeURIComponent(text)}`;
       const r = await fetch(u);
       const body = await r.text();
