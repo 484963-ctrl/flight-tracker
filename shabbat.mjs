@@ -50,7 +50,8 @@ function parseTime(s) {
   return { h: (+m[1] % 12) + (m[3] === 'P' ? 12 : 0) + +m[2] / 60, plus: +(m[5] || 0) };
 }
 
-export function makeChecker({ beforeH = 3, endMin = 50, prepH = 3 } = {}) {
+export function makeChecker({ beforeH = 3, endMin = 50, prepH = 3, places = {} } = {}) {
+  for (const [k, v] of Object.entries(places)) if (!PLACES[k] && Array.isArray(v)) PLACES[k] = [v[1], v[2], v[3]];
   // ימי החג בלוח ארץ ישראל, לשנתיים קדימה
   const holy = new Set();
   const now = new Date();

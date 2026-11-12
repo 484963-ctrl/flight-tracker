@@ -13,7 +13,8 @@ fs.mkdirSync(DATA, { recursive: true });
 
 const cfg = rd('config.json', {});
 let watches = rd('watches.json', []); // נטען מחדש מהמסד בתחילת הריצה (ומנורמל אחרי שהפונקציות מוגדרות)
-const CITY = (c) => cfg.cities[c] || c;
+const AIRPORTS = rd('airports.json', {}); // שם, קו רוחב, קו אורך, אזור זמן — לבחירה לפי נקודת יעד
+const CITY = (c) => cfg.cities[c] || (AIRPORTS[c] && AIRPORTS[c][0]) || c;
 const AIR = { elal: 'El Al' };
 
 // --- נוסעים: מבוגרים (1), ילדים 2–11 (2), תינוקות על הברכיים (4) ---
@@ -278,7 +279,7 @@ function saveChannelStatus() {
 }
 
 (async () => {
-  try { shabbatOk = (await import('./shabbat.mjs')).makeChecker(cfg.shabbat || {}); } catch (e) { console.log('שבת: לא נטען —', e.message); }
+  try { shabbatOk = (await import('./shabbat.mjs')).makeChecker({ ...(cfg.shabbat || {}), places: AIRPORTS }); } catch (e) { console.log('שבת: לא נטען —', e.message); }
   await loadWatches();
   watches = watches.map(norm);
   // כמה יעדים בטיול אחד (למשל לטירול: מינכן, אינסברוק, מילאנו, ונציה) — כל יעד נבדק בנפרד, והזול נבחר
