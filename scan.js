@@ -156,6 +156,17 @@ function saveChannelStatus() {
       legs[k] = { ...legs[k], ...r, t: now.toISOString() };
     }
   }));
+  // סבב שני לחיפושים שלא נטענו — בדפדפן חדש, אחד אחד
+  const failed = keys.filter((k) => legs[k].status === 'FAIL');
+  if (failed.length) {
+    process.stdout.write(' | סבב שני: ');
+    const ctx2 = await browser.newContext({ locale: 'en-US' });
+    for (const k of failed) {
+      const r = await scanOne(ctx2, legs[k].url);
+      process.stdout.write(r.status === 'OK' ? '.' : r.status === 'NONE' ? 'o' : 'x');
+      if (r.status !== 'FAIL') legs[k] = { ...legs[k], ...r, t: now.toISOString() };
+    }
+  }
   await browser.close();
   console.log();
 
