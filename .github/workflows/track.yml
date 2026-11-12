@@ -66,7 +66,19 @@ jobs:
             for i in $(seq 1 30); do
               sleep 60
               now=$(sig)
-              if [ "$now" != "x" ] && [ "$last" != "x" ] && [ "$now" != "$last" ]; then echo "שינוי באתר — בודק עכשיו"; break; fi
+              if [ "$now" != "x" ] && [ "$last" != "x" ] && [ "$now" != "$last" ]; then
+                # שינוי באתר: בדיקה מהירה רק של הטיולים החדשים/ששונו, ואז ממשיכים לחכות לבדיקה המלאה
+                echo "=== שינוי באתר — בדיקה מהירה $(date -u +%H:%M) UTC"
+                last=$now
+                git pull -q --rebase -X ours origin main || true
+                ONLY_NEW=1 node scan.js || echo "הבדיקה המהירה נכשלה"
+                git add data watches.json
+                if ! git diff --cached --quiet; then
+                  git commit -q -m "עדכון מחירים (טיול חדש)"
+                  for j in 1 2 3; do git pull -q --rebase -X ours origin main && git push -q && break; sleep 5; done
+                fi
+                last=$(sig)
+              fi
               [ "$last" = "x" ] && last=$now
             done
           done

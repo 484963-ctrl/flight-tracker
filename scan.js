@@ -290,7 +290,9 @@ function saveChannelStatus() {
   watches = watches.map(norm);
   // כמה יעדים בטיול אחד (למשל לטירול: מינכן, אינסברוק, מילאנו, ונציה) — כל יעד נבדק בנפרד, והזול נבחר
   const citiesOf = (w) => [...new Set((Array.isArray(w.cities) && w.cities.length ? w.cities : [w.city]).filter(Boolean))];
-  const subs = watches.flatMap((w) => citiesOf(w).map((c) => ({ ...w, city: c, id: citiesOf(w).length > 1 ? `${w.id}@${c}` : w.id, parent: w.id })));
+  const mkSubs = (list) => list.flatMap((w) => citiesOf(w).map((c) => ({ ...w, city: c, id: citiesOf(w).length > 1 ? `${w.id}@${c}` : w.id, parent: w.id })));
+  let subs = mkSubs(watches);
+  const allWatches = watches;
   const now = new Date();
   const prev = rd('data/latest.json', {});
   const legsPrev = prev.legs || {};
@@ -298,8 +300,15 @@ function saveChannelStatus() {
   const state = rd('data/state.json', {});
   const sys = (state._sys = state._sys || {});
   const notes = []; // הודעות מערכת: פער בבדיקות, סיכום בוקר
+  // בדיקה מהירה (ONLY_NEW): רק טיולים חדשים או ששונו — כדי שהתוצאה שלהם תגיע תוך כמה דקות
+  const ONLY_NEW = !!process.env.ONLY_NEW;
+  if (ONLY_NEW) {
+    watches = watches.filter((w) => !(prev.watches || {})[w.id] || !(state[w.id] && state[w.id].firstDone));
+    subs = mkSubs(watches);
+    console.log(`בדיקה מהירה: ${watches.length} טיולים חדשים/ששונו`);
+  }
   // הבדיקות נעצרו לזמן ארוך? מודיעים שחזרו לעבוד
-  if (prev.updated && now - new Date(prev.updated) > 90 * 60e3 && sys.gapFor !== prev.updated) {
+  if (!ONLY_NEW && prev.updated && now - new Date(prev.updated) > 90 * 60e3 && sys.gapFor !== prev.updated) {
     const h = Math.round((now - new Date(prev.updated)) / 36e5 * 10) / 10;
     notes.push(`⚠️ הבדיקות של המחירים לא רצו ${h} שעות (תקלה אצל GitHub). עכשיו הן חזרו לעבוד.`);
     sys.gapFor = prev.updated;
@@ -315,7 +324,7 @@ function saveChannelStatus() {
     for (const d of around(w.back, w.backBefore, w.backAfter)) add(w.city, cfg.origin, d, p);
   }
   const ov = cfg.overview;
-  const overviewDue = ov && ov.on && (process.env.FULL || !prev.overviewAt || now - new Date(prev.overviewAt) > 20 * 3600e3);
+  const overviewDue = !ONLY_NEW && ov && ov.on && (process.env.FULL || !prev.overviewAt || now - new Date(prev.overviewAt) > 20 * 3600e3);
   if (overviewDue) for (const c of (ov.cities || Object.keys(cfg.cities))) {
     for (const d of days(ov.outFrom, ov.outTo)) add(cfg.origin, c, d);
     for (const d of days(ov.backFrom, ov.backTo)) add(c, cfg.origin, d);
@@ -366,7 +375,8 @@ function saveChannelStatus() {
   sys.fails = 0;
 
   const alerts = [];
-  const wOut = {};
+  // בבדיקה מהירה — שאר הטיולים נשארים עם התוצאות הקודמות
+  const wOut = ONLY_NEW ? Object.fromEntries(Object.entries(prev.watches || {}).filter(([id]) => allWatches.some((w) => w.id === id))) : {};
   // שלב 1: לפי המחירים לכיוון אחד — אילו צירופי תאריכים כדאי לבדוק כהלוך-חזור
   const plan = {};
   for (const w of subs) {
@@ -489,13 +499,13 @@ function saveChannelStatus() {
     if (w.target) s.under = under ? true : price > w.target + minDrop ? false : s.under;
     s.last = price;
   }
-  for (const id of Object.keys(state)) if (id !== '_sys' && !watches.find((w) => w.id === id)) delete state[id];
+  for (const id of Object.keys(state)) if (id !== '_sys' && !allWatches.find((w) => w.id === id)) delete state[id];
 
   // סיכום בוקר (מ-8:00 שעון ישראל, פעם ביום) — גם סימן שהמערכת חיה
   const il = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false }).formatToParts(now);
   const ilDate = `${il.find((x) => x.type === 'year').value}-${il.find((x) => x.type === 'month').value}-${il.find((x) => x.type === 'day').value}`;
   const ilHour = +il.find((x) => x.type === 'hour').value % 24;
-  if (ilHour >= 8 && sys.daily !== ilDate && watches.length) {
+  if (!ONLY_NEW && ilHour >= 8 && sys.daily !== ilDate && watches.length) {
     const L = ['☀️ בוקר טוב! המחירים של הטיולים שלך הבוקר:', ''];
     for (const w of watches) {
       const r = wOut[w.id];
@@ -516,7 +526,7 @@ function saveChannelStatus() {
   const noDirect = { ...(prev.noDirect || {}) };
   for (const w of subs) { const P = plan[w.id]; if (!P || !P.allLoaded) continue; if (P.noDirect) noDirect[w.city] = now.toISOString(); else if (P.anyDirect) delete noDirect[w.city]; }
   const rtLog = Object.fromEntries(subs.map((w) => [w.id, (plan[w.id] ? plan[w.id].rt : []).flatMap((x) => [`[${x.r.status}${x.r.price ? ' ₪' + x.r.price : ''}]`, ...(x.r.log || [])])]));
-  wr('data/latest.json', { updated: now.toISOString(), fx, rtLog, noDirect, ok: okCount, total: keys.length, overviewAt: overviewDue ? now.toISOString() : prev.overviewAt, legs: merged, watches: wOut });
+  wr('data/latest.json', { updated: ONLY_NEW ? (prev.updated || now.toISOString()) : now.toISOString(), quickAt: ONLY_NEW ? now.toISOString() : prev.quickAt, fx, rtLog, noDirect, ok: okCount, total: keys.length, overviewAt: overviewDue ? now.toISOString() : prev.overviewAt, legs: merged, watches: wOut });
   wr('data/watch-history.json', wHist);
   wr('data/state.json', state);
   console.log(`נבדקו ${okCount}/${keys.length}. התראות: ${alerts.length}`);
