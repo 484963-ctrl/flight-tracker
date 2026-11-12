@@ -83,6 +83,9 @@
   .crow.best { background:var(--greenbg); font-weight:700; }
   .crow .cp { font-weight:700; }
   .crow .cu { display:block; font-size:11px; font-weight:500; color:var(--mute); }
+  .crow .cl { grid-column: 1 / -1; display:flex; gap:12px; font-size:12px; margin-top:-2px; }
+  .crow .cl a { color:var(--blue); text-decoration:none; font-weight:600; }
+  .crow .cl a:hover { text-decoration:underline; }
   .crow .cd { color:var(--mute); font-size:12px; }
   .gbtn { display:block; text-align:center; margin-top:10px; padding:10px; border-radius:12px; background:var(--sky); color:var(--blue2) !important; font-weight:700; text-decoration:none; }
   .gbtn:hover { background:#dce8ff; }
@@ -368,7 +371,9 @@ function card(w, can) {
         const inner = `<span class="cn">${star ? '⭐ ' : ''}${cname(c.city)}</span>
           <span class="cp">${c.price != null ? (() => { const v = pc > 1 ? Math.round(c.price / pc) : c.price; return ils(v) + (usd(v) ? `<span class="cu"><bdi dir="ltr">≈ ${usd(v)}</bdi></span>` : ''); })() : c.none ? '—' : '⏳'}</span>
           <span class="cd">${c.price != null ? `${dayName(c.outDate)} ${heD(c.outDate)} ← ${dayName(c.backDate)} ${heD(c.backDate)}${air ? ' · <bdi style="white-space:nowrap">' + air + '</bdi>' : ''}` : c.none ? 'אין טיסה ישירה מתאימה' : 'בודק…'}</span>`;
-        return c.price != null ? `<a class="crow ${star ? 'best' : ''}" href="${gfRound(c.outDate, c.backDate, CFG.origin || 'TLV', c.city, px)}" target="_blank" title="לראות בגוגל טיסות">${inner}</a>` : `<div class="crow">${inner}</div>`; }).join('')}</div>` : '';
+        const maps = `https://www.google.com/maps/search/${encodeURIComponent(cname(c.city) + ' ' + c.city + ' airport')}?hl=iw`;
+        const links = `<span class="cl">${c.price != null ? `<a href="${gfRound(c.outDate, c.backDate, CFG.origin || 'TLV', c.city, px)}" target="_blank" title="לראות את הטיסות בגוגל טיסות">✈️ טיסות</a>` : ''}<a href="${maps}" target="_blank" title="לראות את היעד בגוגל מפות">🗺️ מפה</a></span>`;
+        return `<div class="crow ${star ? 'best' : ''}">${inner}${links}</div>`; }).join('')}</div>` : '';
   return `<div class="card ${hit ? 'hit' : ''}">
     <div class="photo" style="background-image:url(img/${img}.jpg)">
       ${hit ? '<div class="ribbon">✅ מתחת ליעד!</div>' : ''}
