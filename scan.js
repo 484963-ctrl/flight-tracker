@@ -378,7 +378,8 @@ function saveChannelStatus() {
   // שלב 2: הלוך-חזור (כרטיס אחד).
   //   א. "טבלת תאריכים" — מחיר לכל צירוף תאריכים בטווח (בלי ההגבלות של שבת/חברה/שעות)
   //   ב. בודקים את הצירופים לפי הסדר מהזול, עם ההגבלות, עד שאי אפשר כבר למצוא זול יותר
-  const needRt = subs.filter((w) => plan[w.id].allDates.length);
+  // יעד שאין אליו אף טיסה ישירה מתאימה בכל הטווח (לפי החיפוש לכיוון אחד) — לא מחפשים הלוך-חזור, חוסך זמן
+  const needRt = subs.filter((w) => plan[w.id].allDates.length && plan[w.id].pairs.length);
   if (needRt.length) {
     process.stdout.write(`הלוך-חזור (${needRt.length} טיולים): `);
     const rtBrowser = await chromium.launch(process.env.CHROME_FULL ? { executablePath: process.env.CHROME_FULL, args: ['--headless=new'] } : { channel: 'chromium' });
@@ -437,7 +438,8 @@ function saveChannelStatus() {
     const got = res.filter((x) => x.r.price != null).sort((a, b) => a.r.price - b.r.price);
     const top = got[0] || res[0];
     if (!top) continue;
-    wOut[w.id] = { ...top.r, city: top.city, cities: mine.length > 1 ? res.map((x) => ({ city: x.city, price: x.r.price, none: x.r.none, outDate: x.r.outDate, backDate: x.r.backDate })) : undefined,
+    wOut[w.id] = { ...top.r, city: top.city, cities: mine.length > 1 ? res.map((x) => ({ city: x.city, price: x.r.price, none: x.r.none, outDate: x.r.outDate, backDate: x.r.backDate, rt: x.r.rt, combos: x.r.combos, grid: x.r.grid,
+                   outAir: x.r.out && x.r.out.air, backAir: x.r.back && x.r.back.air, outDep: x.r.out && x.r.out.dep, backDep: x.r.back && x.r.back.dep })) : undefined,
                    none: res.every((x) => x.r.none) };
     w.city = top.city;
     const price = wOut[w.id].price, a = wOut[w.id].out, b = wOut[w.id].back, isRt = wOut[w.id].rt;
