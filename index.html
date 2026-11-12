@@ -4,83 +4,111 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>✈️ הטיולים שלי — מעקב מחירים</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+<meta name="theme-color" content="#0b3b8c">
 <style>
-  :root { --bg:#f3f6fb; --card:#fff; --ink:#1b2333; --mute:#6b7488; --line:#e2e7f0;
-          --blue:#1a4fa0; --green:#0e8a4a; --greenbg:#e5f6ec; --red:#c0392b; --gold:#fff4cc; }
+  :root { --bg:#f2f5fb; --card:#fff; --ink:#14203a; --mute:#66708a; --line:#e3e8f2;
+          --blue:#1450b8; --blue2:#0b3b8c; --sky:#e8f0ff; --green:#0c8a4c; --greenbg:#e3f7ec; --red:#c8372d; --gold:#fff3c4;
+          --shadow:0 6px 24px rgba(20,40,90,.08), 0 1px 3px rgba(20,40,90,.06); --r:20px; }
   * { box-sizing:border-box; }
-  body { margin:0; font-family:"Segoe UI", Arial, sans-serif; background:var(--bg); color:var(--ink); font-size:16px; }
+  body { margin:0; font-family:"Heebo", "Segoe UI", Arial, sans-serif; background:var(--bg); color:var(--ink); font-size:16px; }
+  .hero { position:relative; min-height:290px; color:#fff; display:flex; align-items:flex-end;
+          background:linear-gradient(180deg, rgba(8,30,80,.15) 0%, rgba(8,30,80,.25) 45%, rgba(8,30,80,.85) 100%), url(img/hero.jpg) center 40%/cover; }
+  .hero .in { width:100%; max-width:1100px; margin:0 auto; padding:22px 16px 26px; }
+  .hero .top { position:absolute; top:14px; left:0; right:0; max-width:1100px; margin:0 auto; padding:0 16px; display:flex; justify-content:flex-end; }
+  h1 { margin:0; font-size:40px; font-weight:900; letter-spacing:-.5px; text-shadow:0 2px 14px rgba(0,0,0,.35); }
+  .tag { font-size:17px; opacity:.95; margin-top:2px; }
+  .sub { font-size:14px; opacity:.9; margin-top:10px; }
+  .stats { display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }
+  .stat { background:rgba(255,255,255,.16); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); border:1px solid rgba(255,255,255,.25);
+          border-radius:14px; padding:8px 14px; min-width:120px; }
+  .stat b { display:block; font-size:22px; font-weight:800; }
+  .stat span { font-size:13px; opacity:.9; }
   .wrap { max-width:1100px; margin:0 auto; padding:0 16px 48px; }
-  header { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:18px 0 6px; }
-  h1 { margin:0; font-size:26px; }
-  .sub { color:var(--mute); font-size:14px; }
-  button { font:inherit; cursor:pointer; border-radius:10px; border:1px solid var(--line); background:#fff; padding:8px 14px; }
-  button.pri { background:var(--blue); color:#fff; border-color:var(--blue); font-weight:600; }
-  button.ghost { background:none; border:none; color:var(--blue); padding:4px 6px; }
+  button { font:inherit; cursor:pointer; border-radius:12px; border:1px solid var(--line); background:#fff; padding:9px 16px; color:var(--ink); transition:transform .1s, box-shadow .2s; }
+  button:hover { box-shadow:0 2px 10px rgba(20,40,90,.12); }
+  button:active { transform:scale(.98); }
+  button.pri { background:linear-gradient(135deg, var(--blue), var(--blue2)); color:#fff; border:none; font-weight:700; }
+  button.glass { background:rgba(255,255,255,.2); color:#fff; border:1px solid rgba(255,255,255,.45); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); font-weight:600; }
+  button.ghost { background:none; border:none; color:var(--blue); padding:4px 6px; box-shadow:none; }
   button:disabled { opacity:.5; cursor:default; }
-  .box { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; margin-top:14px; }
+  .box { background:var(--card); border:1px solid var(--line); border-radius:var(--r); padding:18px; margin-top:16px; box-shadow:var(--shadow); }
+  .box > b:first-child { font-size:19px !important; font-weight:800; }
+  .lift { margin-top:-22px; position:relative; z-index:2; }
   .form { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; }
-  .form label { display:flex; flex-direction:column; gap:4px; font-size:14px; color:var(--mute); }
-  .form input, .form select { font:inherit; font-size:17px; padding:8px 10px; border:1px solid #cfd6e3; border-radius:10px; background:#fff; color:var(--ink); }
-  .form input[type=number] { width:130px; }
+  .form label { display:flex; flex-direction:column; gap:5px; font-size:14px; color:var(--mute); font-weight:500; }
+  .form input, .form select { font:inherit; font-size:17px; padding:10px 12px; border:1.5px solid #d3dae8; border-radius:12px; background:#fbfcff; color:var(--ink); }
+  .form input:focus, .form select:focus { outline:none; border-color:var(--blue); box-shadow:0 0 0 3px rgba(20,80,184,.15); }
+  .form input[type=number] { width:140px; }
   .msg { margin-top:10px; font-size:14px; }
   .msg.err { color:var(--red); }
   .msg.ok { color:var(--green); }
-  .cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:14px; margin-top:16px; }
-  .card { background:var(--card); border:2px solid var(--line); border-radius:18px; padding:18px; position:relative; }
-  .card.hit { border-color:var(--green); background:linear-gradient(#fff, var(--greenbg)); }
-  .city { font-size:24px; font-weight:700; }
+  .sec { display:flex; align-items:center; gap:10px; margin:28px 0 0; font-size:22px; font-weight:800; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(330px, 1fr)); gap:18px; margin-top:14px; }
+  .card { background:var(--card); border-radius:var(--r); overflow:hidden; position:relative; box-shadow:var(--shadow); border:2px solid transparent; transition:transform .2s, box-shadow .2s; }
+  .card:hover { transform:translateY(-2px); box-shadow:0 12px 32px rgba(20,40,90,.14); }
+  .card.hit { border-color:var(--green); }
+  .photo { height:170px; background-size:cover; background-position:center; position:relative; display:flex; align-items:flex-end; }
+  .photo::after { content:""; position:absolute; inset:0; background:linear-gradient(180deg, rgba(0,0,0,0) 35%, rgba(5,20,50,.78) 100%); }
+  .photo .cap { position:relative; z-index:1; padding:12px 16px; color:#fff; width:100%; }
+  .city { font-size:28px; font-weight:900; line-height:1.1; text-shadow:0 2px 10px rgba(0,0,0,.4); }
+  .photo .air { color:#fff; opacity:.92; font-size:14px; }
+  .ribbon { position:absolute; top:12px; right:12px; z-index:1; background:var(--green); color:#fff; font-weight:800; font-size:14px; padding:5px 12px; border-radius:999px; box-shadow:0 2px 8px rgba(0,0,0,.25); }
+  .cb { padding:14px 18px 16px; }
   .air { font-size:14px; color:var(--mute); }
-  .dates { margin-top:6px; font-size:16px; }
-  .price { font-size:46px; font-weight:800; color:var(--blue); margin:10px 0 2px; line-height:1.1; }
+  .dates { font-size:16px; font-weight:500; }
+  .price { font-size:48px; font-weight:900; color:var(--blue); margin:6px 0 4px; line-height:1.05; letter-spacing:-1px; }
   .card.hit .price { color:var(--green); }
   .badge { display:inline-block; padding:5px 12px; border-radius:999px; font-size:15px; font-weight:600; }
   .badge.hit { background:var(--green); color:#fff; }
-  .badge.wait { background:#eef1f7; color:var(--ink); }
+  .badge.wait { background:var(--sky); color:var(--blue2); }
   .chg { font-size:15px; margin-top:8px; }
-  .dn { color:var(--green); font-weight:700; }
+  .dn { color:var(--green); font-weight:800; }
   .up { color:var(--red); font-weight:700; }
-  .legs { margin-top:12px; border-top:1px solid var(--line); padding-top:10px; font-size:14px; line-height:1.9; }
+  .legs { margin-top:12px; border-top:1px dashed var(--line); padding-top:10px; font-size:14px; line-height:1.9; }
   .legs a { color:var(--blue); }
   .low { font-size:14px; color:var(--mute); margin-top:6px; }
   svg.sp { width:100%; height:60px; margin-top:8px; }
-  .tools { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; }
-  .confirm { background:#fff3f2; border:1px solid #f3c2bd; border-radius:10px; padding:8px; margin-top:8px; font-size:14px; }
+  .tools { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; border-top:1px solid var(--line); padding-top:8px; }
+  .confirm { background:#fff3f2; border:1px solid #f3c2bd; border-radius:12px; padding:10px; margin-top:8px; font-size:14px; }
   .empty { text-align:center; color:var(--mute); padding:30px; }
-  details summary { cursor:pointer; font-weight:600; font-size:17px; }
+  details summary { cursor:pointer; font-weight:700; font-size:17px; }
   .tabs { display:flex; gap:8px; margin:12px 0; flex-wrap:wrap; }
   .tabs button.on { background:var(--blue); color:#fff; border-color:var(--blue); }
   .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-  table { width:100%; border-collapse:collapse; border:1px solid var(--line); }
-  th, td { padding:6px 4px; text-align:center; border-bottom:1px solid var(--line); font-size:14px; }
-  th { background:#eef2f9; }
-  td.best { background:var(--gold); font-weight:700; }
+  table { width:100%; border-collapse:collapse; border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  th, td { padding:7px 4px; text-align:center; border-bottom:1px solid var(--line); font-size:14px; }
+  th { background:var(--sky); color:var(--blue2); }
+  td.best { background:var(--gold); font-weight:800; }
   .sat td { color:#aaa; }
   .small { font-size:12px; color:var(--mute); display:block; }
-  @media (max-width:760px) { .grid2 { grid-template-columns:1fr; } .price { font-size:40px; } }
-  .chans { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:10px; margin-top:10px; }
-  .chan { border:2px solid var(--line); border-radius:14px; padding:12px; }
-  .chan.on { border-color:var(--blue); background:#f3f7ff; }
-  .chan label.tg { display:flex; align-items:center; gap:10px; font-size:18px; font-weight:700; cursor:pointer; }
-  .chan input[type=checkbox] { width:22px; height:22px; }
+  .chans { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; margin-top:12px; }
+  .chan { border:2px solid var(--line); border-radius:16px; padding:14px; background:#fbfcff; transition:border-color .2s, background .2s; }
+  .chan.on { border-color:var(--blue); background:var(--sky); }
+  .chan label.tg { display:flex; align-items:center; gap:10px; font-size:19px; font-weight:800; cursor:pointer; }
+  .chan input[type=checkbox] { width:22px; height:22px; accent-color:var(--blue); }
   .chan .st { font-size:13px; margin-top:6px; }
   .chan .st.ok { color:var(--green); } .chan .st.no { color:var(--red); }
   .chan details { font-size:13px; margin-top:6px; line-height:1.7; }
-  .chan details summary { font-size:13px; font-weight:600; color:var(--blue); }
+  .chan details summary { font-size:13px; font-weight:700; color:var(--blue); }
+  code { background:#eef1f7; padding:1px 6px; border-radius:6px; font-size:12px; }
   .note { font-size:13px; color:var(--mute); margin-top:16px; line-height:1.7; }
-  code { background:#eef1f7; padding:1px 5px; border-radius:5px; }
+  .hero .in { text-shadow:0 1px 8px rgba(0,0,0,.35); }
+  @media (max-width:760px) { .hero .in { padding-top:72px; } .stat { min-width:0; flex:1; padding:8px 10px; } .stat b { font-size:19px; } .grid2 { grid-template-columns:1fr; } .price { font-size:42px; } h1 { font-size:32px; } .hero { min-height:250px; } .cards { grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
+<section class="hero">
+  <div class="top"><button id="btnKey" class="glass">🔑 כניסה לעריכה</button></div>
+  <div class="in">
+    <h1>✈️ הטיולים שלי</h1>
+    <div class="tag">מעקב מחירי טיסות ישירות מתל אביב · התראה על כל ירידה</div>
+    <div class="stats" id="stats"></div>
+    <div class="sub" id="upd">טוען…</div>
+  </div>
+</section>
 <div class="wrap">
-  <header>
-    <div>
-      <h1>✈️ הטיולים שלי</h1>
-      <div class="sub" id="upd">טוען…</div>
-    </div>
-    <div>
-      <button id="btnKey">🔑 כניסה לעריכה</button>
-    </div>
-  </header>
 
   <div class="box" id="keyBox" style="display:none">
     <b style="font-size:18px">🔑 כניסה לעריכה</b>
@@ -91,6 +119,9 @@
     </div>
     <div class="msg" id="tokMsg"></div>
   </div>
+
+  <div class="sec">🧳 הטיולים שלי במעקב</div>
+  <div class="cards" id="cards"></div>
 
   <div class="box" id="addBox">
     <b style="font-size:18px">➕ טיול חדש למעקב</b>
@@ -117,7 +148,7 @@
     <div class="msg" id="chMsg"></div>
   </div>
 
-  <div class="cards" id="cards"></div>
+
 
   <details class="box" id="ovBox">
     <summary>📅 כל התאריכים — לעזרה בבחירת תאריכים (מתעדכן פעם ביום)</summary>
@@ -181,7 +212,7 @@ function render() {
   const can = !!code();
   $('#btnKey').textContent = can ? '✓ במצב עריכה' : '🔑 כניסה לעריכה';
   $('#addBox').style.display = can ? '' : 'none';
-  $('#upd').innerHTML = (L.updated ? `בדיקה אחרונה: ${ago(L.updated)} · ${new Date(L.updated).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}` : 'עוד אין בדיקות')
+  $('#upd').innerHTML = (L.updated ? `🕒 בדיקה אחרונה: ${ago(L.updated)} · ${new Date(L.updated).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}` : 'עוד אין בדיקות')
     + ' · נבדק כל חצי שעה';
   if (!$('#fCity').options.length && CFG.cities) {
     $('#fCity').innerHTML = Object.entries(CFG.cities).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
@@ -190,6 +221,7 @@ function render() {
   const cards = W.map((w) => card(w, can)).join('');
   $('#cards').innerHTML = cards || `<div class="box empty">עוד אין טיולים במעקב. ${can ? 'מוסיפים טיול למעלה.' : 'לוחצים "🔑 חיבור לעריכה" כדי להוסיף.'}</div>`;
   bindCards();
+  renderStats();
   renderChannels(can);
   renderOverview();
 }
@@ -213,10 +245,14 @@ function card(w, can) {
     : r && r.none ? '<div class="price" style="font-size:20px;color:var(--red)">אין טיסה ישירה מתאימה בתאריכים האלה</div>'
     : `<div class="price" style="font-size:20px;color:var(--mute)">⏳ ייבדק בבדיקה הבאה (עד חצי שעה)</div>`;
   const leg = (lbl, d, x, url) => `<div>${lbl} ${dayName(d)} ${heD(d)}: ${x ? `<b>${ils(x.price)}</b> · ${ltr(x.dep)} · ${x.air}` : '—'}${url ? ` · <a href="${url}" target="_blank">לראות בגוגל</a>` : ''}</div>`;
+  const img = ['MUC', 'ZRH', 'MXP'].includes(w.city) ? w.city : 'other';
   return `<div class="card ${hit ? 'hit' : ''}">
-    <div class="city">${CFG.cities && CFG.cities[w.city] || w.city}</div>
-    <div class="air">${air}</div>
-    <div class="dates">${dayName(w.out)} ${heD(w.out)} ← ${dayName(w.back)} ${heD(w.back)} · ${nights(w.out, w.back)} לילות</div>
+    <div class="photo" style="background-image:url(img/${img}.jpg)">
+      ${hit ? '<div class="ribbon">✅ מתחת ליעד!</div>' : ''}
+      <div class="cap"><div class="city">${CFG.cities && CFG.cities[w.city] || w.city}</div><div class="air">${air}</div></div>
+    </div>
+    <div class="cb">
+    <div class="dates">📅 ${dayName(w.out)} ${heD(w.out)} ← ${dayName(w.back)} ${heD(w.back)} · ${nights(w.out, w.back)} לילות</div>
     ${status}
     ${badge}
     <div class="chg">${chg}${r && r.stale ? ' · <span class="up">חלק מהמחיר מבדיקה קודמת</span>' : ''}</div>
@@ -233,20 +269,24 @@ function card(w, can) {
       <button class="pri" data-esave="${w.id}">שמירה</button><button data-ecancel>ביטול</button></div>
       <div class="msg err" id="eMsg"></div>` : ''}
     ${confirmDel === w.id ? `<div class="confirm">למחוק את הטיול הזה מהמעקב? <button class="pri" style="background:var(--red);border-color:var(--red)" data-dyes="${w.id}">כן, למחוק</button> <button data-dno>לא</button></div>` : ''}
+    </div>
   </div>`;
 }
 
 function spark(h) {
-  if (h.length < 3 || new Date(h[h.length - 1].t) - new Date(h[0].t) < 3 * 3600e3) return '<div class="low">📈 הגרף יופיע אחרי כמה שעות של מעקב</div>';
-  const v = h.map((x) => x.price), t = h.map((x) => +new Date(x.t));
-  const mn = Math.min(...v), mx = Math.max(...v), W_ = 300, H_ = 56;
-  const X = (i) => 4 + (W_ - 8) * (t[i] - t[0]) / Math.max(1, t[t.length - 1] - t[0]);
-  const Y = (y) => 5 + (H_ - 10) * (mx === mn ? .5 : (mx - y) / (mx - mn));
-  // מדרגות: המחיר נשאר עד שהשתנה
-  let d = `M${X(0)},${Y(v[0])}`;
-  for (let i = 1; i < v.length; i++) d += ` H${X(i).toFixed(1)} V${Y(v[i]).toFixed(1)}`;
-  d += ` H${W_ - 4}`;
-  return `<svg class="sp" viewBox="0 0 ${W_} ${H_}" preserveAspectRatio="none"><path d="${d}" fill="none" stroke="#1a4fa0" stroke-width="2.5"/></svg>`;
+  const v = h.map((x) => x.price), mn = Math.min(...v), mx = Math.max(...v), W_ = 300, H_ = 60;
+  if (h.length < 3) return '<div class="low">📈 הגרף יופיע אחרי כמה שינויים במחיר</div>';
+  if (mx - mn < 30) return '<div class="low">📈 המחיר יציב מאז שהתחלנו לעקוב</div>';
+  const X = (i) => 4 + (W_ - 8) * i / (v.length - 1);
+  const Y = (y) => 6 + (H_ - 14) * (mx === mn ? .5 : (mx - y) / (mx - mn));
+  const pts = v.map((y, i) => `${X(i).toFixed(1)},${Y(y).toFixed(1)}`);
+  const id = 'g' + Math.random().toString(36).slice(2, 7);
+  return `<svg class="sp" viewBox="0 0 ${W_} ${H_}" preserveAspectRatio="none">
+    <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1450b8" stop-opacity=".25"/><stop offset="1" stop-color="#1450b8" stop-opacity="0"/></linearGradient></defs>
+    <path d="M${pts.join(' L')} L${X(v.length - 1)},${H_} L${X(0)},${H_} Z" fill="url(#${id})"/>
+    <polyline points="${pts.join(' ')}" fill="none" stroke="#1450b8" stroke-width="2.5" stroke-linejoin="round"/>
+    <circle cx="${X(v.length - 1)}" cy="${Y(v[v.length - 1])}" r="4" fill="#1450b8"/></svg>
+    <div class="small">📈 המחיר מאז שהתחלנו לעקוב: הכי נמוך ${ils(mn)} · הכי גבוה ${ils(mx)}</div>`;
 }
 
 function bindCards() {
@@ -273,6 +313,17 @@ function bindCards() {
       editT = null; await saveWatches(list);
     } catch (e) { $('#eMsg').textContent = e.message; b.disabled = false; }
   });
+}
+
+// --- סיכום בראש הדף ---
+function renderStats() {
+  const prices = W.map((w) => ({ w, p: (L.watches || {})[w.id] })).filter((x) => x.p && x.p.price != null);
+  const best = prices.length ? prices.reduce((a, b) => b.p.price < a.p.price ? b : a) : null;
+  const hits = prices.filter((x) => x.w.target && x.p.price <= x.w.target).length;
+  $('#stats').innerHTML = `
+    <div class="stat"><b>${W.length}</b><span>טיולים במעקב</span></div>
+    ${best ? `<div class="stat"><b>${ils(best.p.price)}</b><span>הכי זול · ${CFG.cities[best.w.city] || best.w.city}</span></div>` : ''}
+    <div class="stat"><b>${hits}</b><span>מתחת למחיר שקבעת</span></div>`;
 }
 
 // --- ערוצי התראה ---
