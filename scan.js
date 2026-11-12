@@ -380,7 +380,10 @@ function saveChannelStatus() {
     pairs.sort((x, y) => x.ow - y.ow);
     const allDates = [];
     for (const o of outs) for (const k of backs) if (k.d > o.d) allDates.push({ o, k });
-    plan[w.id] = { pairs, allDates, allLoaded, rt: [] };
+    // יש בכלל טיסה ישירה לשדה הזה בטווח? (בלי קשר להגדרות)
+    const anyDirect = [...outs.map((x) => x.A), ...backs.map((x) => x.B)].some((L) => L && L.status === 'OK' && (L.res || []).length);
+    const noDirect = allLoaded && ![...outs.map((x) => x.A)].some((L) => L && L.status === 'OK' && (L.res || []).length) || allLoaded && ![...backs.map((x) => x.B)].some((L) => L && L.status === 'OK' && (L.res || []).length);
+    plan[w.id] = { pairs, allDates, allLoaded, anyDirect, noDirect, rt: [] };
   }
   // שלב 2: הלוך-חזור (כרטיס אחד).
   //   א. "טבלת תאריכים" — מחיר לכל צירוף תאריכים בטווח (בלי ההגבלות של שבת/חברה/שעות)
@@ -435,6 +438,7 @@ function saveChannelStatus() {
                    gridMin: plan[w.id].gridMin != null && price != null && plan[w.id].gridMin < price ? plan[w.id].gridMin : null,
                    outUrl: best && best.o.A && best.o.A.url, backUrl: best && best.k.B && best.k.B.url,
                    stale: !!(best && !isRt && ((best.o.A && best.o.A.stale) || (best.k.B && best.k.B.stale))), none: allLoaded && price == null && !plan[w.id].rt.some((x) => x.r.status === 'FAIL') };
+    if (wOut[w.id].price == null && wOut[w.id].none) wOut[w.id].why = plan[w.id].noDirect ? 'nodirect' : 'filters';
     subOut[w.id] = wOut[w.id];
     if (w.id !== w.parent) delete wOut[w.id];
   }
@@ -445,7 +449,7 @@ function saveChannelStatus() {
     const got = res.filter((x) => x.r.price != null).sort((a, b) => a.r.price - b.r.price);
     const top = got[0] || res[0];
     if (!top) continue;
-    wOut[w.id] = { ...top.r, city: top.city, cities: mine.length > 1 ? res.map((x) => ({ city: x.city, price: x.r.price, none: x.r.none, outDate: x.r.outDate, backDate: x.r.backDate, rt: x.r.rt, combos: x.r.combos, grid: x.r.grid,
+    wOut[w.id] = { ...top.r, city: top.city, cities: mine.length > 1 ? res.map((x) => ({ city: x.city, price: x.r.price, none: x.r.none, why: x.r.why, outDate: x.r.outDate, backDate: x.r.backDate, rt: x.r.rt, combos: x.r.combos, grid: x.r.grid,
                    outAir: x.r.out && x.r.out.air, backAir: x.r.back && x.r.back.air, outDep: x.r.out && x.r.out.dep, backDep: x.r.back && x.r.back.dep })) : undefined,
                    none: res.every((x) => x.r.none) };
     w.city = top.city;
@@ -509,8 +513,10 @@ function saveChannelStatus() {
   }
 
   const fx = await getFx(prev.fx);
+  const noDirect = { ...(prev.noDirect || {}) };
+  for (const w of subs) { const P = plan[w.id]; if (!P || !P.allLoaded) continue; if (P.noDirect) noDirect[w.city] = now.toISOString(); else if (P.anyDirect) delete noDirect[w.city]; }
   const rtLog = Object.fromEntries(subs.map((w) => [w.id, (plan[w.id] ? plan[w.id].rt : []).flatMap((x) => [`[${x.r.status}${x.r.price ? ' ₪' + x.r.price : ''}]`, ...(x.r.log || [])])]));
-  wr('data/latest.json', { updated: now.toISOString(), fx, rtLog, ok: okCount, total: keys.length, overviewAt: overviewDue ? now.toISOString() : prev.overviewAt, legs: merged, watches: wOut });
+  wr('data/latest.json', { updated: now.toISOString(), fx, rtLog, noDirect, ok: okCount, total: keys.length, overviewAt: overviewDue ? now.toISOString() : prev.overviewAt, legs: merged, watches: wOut });
   wr('data/watch-history.json', wHist);
   wr('data/state.json', state);
   console.log(`נבדקו ${okCount}/${keys.length}. התראות: ${alerts.length}`);

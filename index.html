@@ -299,7 +299,7 @@ function destList(p, checked) {
   const list = Object.entries(d.drive || {}).filter(([, t]) => t <= d.hours * 3600).sort((a, b) => a[1] - b[1]);
   if (!list.length) return `<div class="msg err">אין שדה תעופה עם טיסות ישירות מתל אביב עד ${d.hours} שעות נסיעה מ-${d.name}.</div>`;
   return `<details class="dair"><summary>🚗 ${list.length} שדות תעופה עד ${d.hours} שעות נסיעה מ-${d.name} ▾</summary>
-    <div class="chips" style="margin-top:8px">${list.map(([c, t]) => `<label class="chip"><input type="checkbox" data-city="${p}" value="${c}" ${!checked || checked.includes(c) ? 'checked' : ''}> ${cnameAll(c)} · 🚗 ${hm(t)}</label>`).join('')}</div></details>`;
+    <div class="chips" style="margin-top:8px">${list.map(([c, t]) => { const nd = L.noDirect && L.noDirect[c]; return `<label class="chip" ${nd ? 'style="opacity:.6" title="בבדיקות האחרונות לא נמצאו טיסות ישירות מתל אביב לשדה הזה"' : ''}><input type="checkbox" data-city="${p}" value="${c}" ${(checked ? checked.includes(c) : !nd) ? 'checked' : ''}> ${cnameAll(c)} · 🚗 ${hm(t)}${nd ? ' · (אין טיסות ישירות)' : ''}</label>`; }).join('')}</div></details>`;
 }
 const hav = (a, b, c, d) => { const R = 6371, r = Math.PI / 180, x = Math.sin((c - a) * r / 2) ** 2 + Math.cos(a * r) * Math.cos(c * r) * Math.sin((d - b) * r / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(x)); };
 async function destCompute(p, lat, lon, name) {
@@ -441,7 +441,7 @@ function card(w, can) {
   const status = price != null ? (pc > 1
       ? `<div class="price">${ils(per)}<span style="font-size:20px;font-weight:700"> לנוסע</span>${usdTag(per)}</div><div class="tot">לכל ${pc} הנוסעים: <b>${ils(price)}</b>${usdTag(price)}</div>`
       : `<div class="price">${ils(price)}${usdTag(price)}</div>`)
-    : r && r.none ? '<div class="price" style="font-size:20px;color:var(--red)">אין טיסה ישירה מתאימה בתאריכים האלה</div>'
+    : r && r.none ? `<div class="price" style="font-size:20px;color:var(--red)">${r.why === 'nodirect' ? 'אין טיסות ישירות מתל אביב בתאריכים האלה' : 'אין טיסה ישירה שמתאימה להגדרות שלך בתאריכים האלה'}</div>`
     : `<div class="price" style="font-size:20px;color:var(--mute)">⏳ בודק עכשיו… המחיר יופיע תוך כמה דקות</div>`;
   const leg = (lbl, d, x) => `<div>${lbl} ${dayName(d)} ${heD(d)}: ${x ? `${x.price != null && !(r && r.rt) ? `<b>${ils(x.price)}</b>${pc > 1 ? ' לכולם' : ''}${usdTag(x.price)} · ` : ''}${ltr(x.dep)}${x.arr ? ' ← ' + ltr(x.arr) : ''} · ${x.air}` : '—'}</div>`;
   const cityNow = (r && r.city) || citiesOfW(w)[0];
@@ -455,7 +455,7 @@ function card(w, can) {
         const air = c.outAir ? [...new Set([c.outAir, c.backAir].filter(Boolean))].join(' / ') : '';
         const inner = `<span class="cn">${star ? '⭐ ' : ''}${cname(c.city)}${w.drive && w.drive[c.city] ? `<span class="cu">🚗 ${hm(w.drive[c.city])} נסיעה</span>` : ''}</span>
           <span class="cp">${c.price != null ? (() => { const v = pc > 1 ? Math.round(c.price / pc) : c.price; return ils(v) + (usd(v) ? `<span class="cu"><bdi dir="ltr">≈ ${usd(v)}</bdi></span>` : ''); })() : c.none ? '—' : '⏳'}</span>
-          <span class="cd">${c.price != null ? `${dayName(c.outDate)} ${heD(c.outDate)} ← ${dayName(c.backDate)} ${heD(c.backDate)}${air ? ' · <bdi style="white-space:nowrap">' + air + '</bdi>' : ''}` : c.none ? 'אין טיסה ישירה מתאימה' : 'בודק…'}</span>`;
+          <span class="cd">${c.price != null ? `${dayName(c.outDate)} ${heD(c.outDate)} ← ${dayName(c.backDate)} ${heD(c.backDate)}${air ? ' · <bdi style="white-space:nowrap">' + air + '</bdi>' : ''}` : c.none ? (c.why === 'nodirect' ? '✈️ אין טיסות ישירות מתל אביב בתאריכים האלה' : 'יש טיסות ישירות, אבל לא לפי ההגדרות שלך (חברה, שעות, שבת)') : 'בודק…'}</span>`;
         const links = `<span class="cl">${c.price != null ? `<a href="${gfRound(c.outDate, c.backDate, CFG.origin || 'TLV', c.city, px)}" target="_blank" title="לראות את הטיסות בגוגל טיסות">✈️ טיסות</a>` : ''}</span>`;
         return `<div class="crow ${star ? 'best' : ''}">${inner}${links}</div>`; }).join('')}</div>` : '';
   return `<div class="card ${hit ? 'hit' : ''}">
