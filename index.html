@@ -60,6 +60,9 @@
   .dates { font-size:16px; font-weight:500; }
   .price { font-size:48px; font-weight:900; color:var(--blue); margin:6px 0 4px; line-height:1.05; letter-spacing:-1px; }
   .card.hit .price { color:var(--green); }
+  .usd { font-size:13px; font-weight:500; color:var(--mute); letter-spacing:0; white-space:nowrap; }
+  .price .usd { font-size:18px; font-weight:600; margin-inline-start:6px; vertical-align:middle; }
+  .stat .usd { color:#fff; opacity:.85; font-size:12px; }
   .badge { display:inline-block; padding:5px 12px; border-radius:999px; font-size:15px; font-weight:600; }
   .badge.hit { background:var(--green); color:#fff; }
   .badge.wait { background:var(--sky); color:var(--blue2); }
@@ -168,6 +171,9 @@ const DAY = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','שבת'];
 const dayName = (d) => { const w = new Date(d + 'T12:00:00Z').getUTCDay(); return w === 6 ? 'שבת' : 'יום ' + DAY[w]; };
 const heD = (d) => { const [, m, day] = d.split('-'); return `${+day}.${+m}`; };
 const ils = (n) => n == null ? '—' : '₪' + n.toLocaleString('en-US');
+// מחיר בדולרים לפי השער העדכני (נשמר בכל בדיקה)
+const usd = (n) => (n == null || !L.fx || !L.fx.rate) ? '' : '$' + Math.round(n / L.fx.rate).toLocaleString('en-US');
+const usdTag = (n, cls = 'usd') => { const u = usd(n); return u ? ` <span class="${cls}"><bdi dir="ltr">≈ ${u}</bdi></span>` : ''; };
 const nights = (a, b) => Math.round((new Date(b) - new Date(a)) / 864e5);
 const ago = (t) => { const m = Math.round((Date.now() - new Date(t)) / 6e4); return m < 1 ? 'עכשיו' : m < 60 ? `לפני ${m} דק׳` : m < 1440 ? `לפני ${Math.round(m / 60)} שעות` : `לפני ${Math.round(m / 1440)} ימים`; };
 const ltr = (s) => `<bdi dir="ltr">${s}</bdi>`;
@@ -213,7 +219,7 @@ function render() {
   $('#btnKey').textContent = can ? '✓ במצב עריכה' : '🔑 כניסה לעריכה';
   $('#addBox').style.display = can ? '' : 'none';
   $('#upd').innerHTML = (L.updated ? `🕒 בדיקה אחרונה: ${ago(L.updated)} · ${new Date(L.updated).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}` : 'עוד אין בדיקות')
-    + ' · נבדק כל חצי שעה';
+    + ' · נבדק כל חצי שעה' + (L.fx && L.fx.rate ? ` · 💵 שער הדולר: ₪${L.fx.rate.toFixed(3)} (${L.fx.date.split('-').reverse().join('.')})` : '');
   if (!$('#fCity').options.length && CFG.cities) {
     $('#fCity').innerHTML = Object.entries(CFG.cities).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
   }
@@ -239,12 +245,12 @@ function card(w, can) {
   else if (price != null && h.length) chg = 'ללא שינוי';
   const badge = !w.target ? '<span class="badge wait">בלי מחיר יעד — התראה על כל ירידה</span>'
     : hit ? `<span class="badge hit">✅ מתחת ליעד (${ils(w.target)})</span>`
-    : price != null ? `<span class="badge wait">יעד ${ils(w.target)} · חסר עוד ${ils(price - w.target)}</span>`
+    : price != null ? `<span class="badge wait">יעד ${ils(w.target)}${usdTag(w.target)} · חסר עוד ${ils(price - w.target)}</span>`
     : `<span class="badge wait">יעד ${ils(w.target)}</span>`;
-  const status = price != null ? `<div class="price">${ils(price)}</div>`
+  const status = price != null ? `<div class="price">${ils(price)}${usdTag(price)}</div>`
     : r && r.none ? '<div class="price" style="font-size:20px;color:var(--red)">אין טיסה ישירה מתאימה בתאריכים האלה</div>'
     : `<div class="price" style="font-size:20px;color:var(--mute)">⏳ ייבדק בבדיקה הבאה (עד חצי שעה)</div>`;
-  const leg = (lbl, d, x, url) => `<div>${lbl} ${dayName(d)} ${heD(d)}: ${x ? `<b>${ils(x.price)}</b> · ${ltr(x.dep)} · ${x.air}` : '—'}${url ? ` · <a href="${url}" target="_blank">לראות בגוגל</a>` : ''}</div>`;
+  const leg = (lbl, d, x, url) => `<div>${lbl} ${dayName(d)} ${heD(d)}: ${x ? `<b>${ils(x.price)}</b>${usdTag(x.price)} · ${ltr(x.dep)} · ${x.air}` : '—'}${url ? ` · <a href="${url}" target="_blank">לראות בגוגל</a>` : ''}</div>`;
   const img = ['MUC', 'ZRH', 'MXP'].includes(w.city) ? w.city : 'other';
   return `<div class="card ${hit ? 'hit' : ''}">
     <div class="photo" style="background-image:url(img/${img}.jpg)">
@@ -322,7 +328,7 @@ function renderStats() {
   const hits = prices.filter((x) => x.w.target && x.p.price <= x.w.target).length;
   $('#stats').innerHTML = `
     <div class="stat"><b>${W.length}</b><span>טיולים במעקב</span></div>
-    ${best ? `<div class="stat"><b>${ils(best.p.price)}</b><span>הכי זול · ${CFG.cities[best.w.city] || best.w.city}</span></div>` : ''}
+    ${best ? `<div class="stat"><b>${ils(best.p.price)}${usdTag(best.p.price)}</b><span>הכי זול · ${CFG.cities[best.w.city] || best.w.city}</span></div>` : ''}
     <div class="stat"><b>${hits}</b><span>מתחת למחיר שקבעת</span></div>`;
 }
 
@@ -378,8 +384,8 @@ function renderOverview() {
     const mE = Math.min(...rows.filter((x) => x.el).map((x) => x.el.price)), mA = Math.min(...rows.filter((x) => x.any).map((x) => x.any.price));
     return `<table><tr><th>תאריך</th><th>אל על</th><th>הכי זול ישיר</th></tr>${rows.map((x) => `<tr class="${new Date(x.d + 'T12:00:00Z').getUTCDay() === 6 ? 'sat' : ''}">
       <td>${heD(x.d)}<span class="small">${dayName(x.d)}</span></td>
-      <td class="${x.el && x.el.price === mE ? 'best' : ''}">${x.el ? ils(x.el.price) + `<span class="small">${ltr(x.el.dep)}</span>` : '—'}</td>
-      <td class="${x.any && x.any.price === mA ? 'best' : ''}">${x.any ? ils(x.any.price) + `<span class="small">${x.any.air}</span>` : '—'}</td></tr>`).join('')}</table>`;
+      <td class="${x.el && x.el.price === mE ? 'best' : ''}">${x.el ? ils(x.el.price) + usdTag(x.el.price, 'small') + `<span class="small">${ltr(x.el.dep)}</span>` : '—'}</td>
+      <td class="${x.any && x.any.price === mA ? 'best' : ''}">${x.any ? ils(x.any.price) + usdTag(x.any.price, 'small') + `<span class="small">${x.any.air}</span>` : '—'}</td></tr>`).join('')}</table>`;
   };
   $('#ov').innerHTML = `<div class="grid2">
     <div><b>🛫 הלוך</b>${table(CFG.origin, ovCity, days(ov.outFrom, ov.outTo))}</div>

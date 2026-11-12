@@ -107,6 +107,16 @@ async function loadWatches() {
   } catch (e) { console.log('לא הצלחתי לטעון את הטיולים מהמסד, משתמש בקובץ:', e.message); }
 }
 
+// שער הדולר (יציג, מהבנק האירופי; גיבוי: exchangerate-api) — להצגת מחיר בדולרים באתר
+async function getFx(prevFx) {
+  const tries = [
+    async () => { const d = await (await fetch('https://api.frankfurter.app/latest?from=USD&to=ILS', { redirect: 'follow' })).json(); return { rate: d.rates.ILS, date: d.date, src: 'הבנק המרכזי האירופי' }; },
+    async () => { const d = await (await fetch('https://open.er-api.com/v6/latest/USD')).json(); return { rate: d.rates.ILS, date: new Date(d.time_last_update_unix * 1000).toISOString().slice(0, 10), src: 'exchangerate-api' }; },
+  ];
+  for (const t of tries) { try { const r = await t(); if (r.rate > 1 && r.rate < 10) return r; } catch {} }
+  return prevFx || null;
+}
+
 // מצב הערוצים לאתר: מחובר? מתי נשלח לאחרונה? הצליח?
 function saveChannelStatus() {
   const prev = rd('data/channels.json', {});
@@ -228,7 +238,8 @@ function saveChannelStatus() {
     sys.daily = ilDate;
   }
 
-  wr('data/latest.json', { updated: now.toISOString(), ok: okCount, total: keys.length, overviewAt: overviewDue ? now.toISOString() : prev.overviewAt, legs: merged, watches: wOut });
+  const fx = await getFx(prev.fx);
+  wr('data/latest.json', { updated: now.toISOString(), fx, ok: okCount, total: keys.length, overviewAt: overviewDue ? now.toISOString() : prev.overviewAt, legs: merged, watches: wOut });
   wr('data/watch-history.json', wHist);
   wr('data/state.json', state);
   console.log(`נבדקו ${okCount}/${keys.length}. התראות: ${alerts.length}`);
