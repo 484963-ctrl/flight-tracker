@@ -12,7 +12,7 @@ const wr = (f, v) => fs.writeFileSync(path.join(ROOT, f), JSON.stringify(v));
 fs.mkdirSync(DATA, { recursive: true });
 
 const cfg = rd('config.json', {});
-let watches = rd('watches.json', []); // נטען מחדש מהמסד בתחילת הריצה
+let watches = rd('watches.json', []).map(norm); // נטען מחדש מהמסד בתחילת הריצה
 const CITY = (c) => cfg.cities[c] || c;
 const AIR = { elal: 'El Al' };
 
@@ -20,7 +20,8 @@ const AIR = { elal: 'El Al' };
 function tfs(date, from, to) {
   const s = (t) => Buffer.from(t, 'utf8');
   const field = (tag, buf) => Buffer.concat([Buffer.from([tag, buf.length]), buf]);
-  const inner = Buffer.concat([field(0x12, s(date)), field(0x6a, field(0x12, s(from))), field(0x72, field(0x12, s(to)))]);
+  // 0x28 0x00 = רק טיסות ישירות
+  const inner = Buffer.concat([field(0x12, s(date)), Buffer.from([0x28, 0]), field(0x6a, field(0x12, s(from))), field(0x72, field(0x12, s(to)))]);
   return Buffer.concat([field(0x1a, inner), Buffer.from([0x42, 1, 1, 0x48, 1, 0x98, 1, 2])]).toString('base64');
 }
 const gfUrl = (date, from, to) => `https://www.google.com/travel/flights/search?tfs=${encodeURIComponent(tfs(date, from, to))}&hl=en&curr=ILS`;
@@ -61,7 +62,7 @@ async function scanOne(ctx, url) {
         await p.waitForTimeout(1000);
         const t = await p.evaluate(() => document.body.innerText);
         if (/No results returned|No options matching/i.test(t)) { if (++none >= 2) { await p.close(); return { status: 'NONE', res: [] }; } break; }
-        if (/Top flights|Other departing flights|Departing flights/.test(t) && /₪/.test(t)) {
+        if (/^₪[\d,]+$/m.test(t) && /\d{1,2}:\d\d\s[AP]M/.test(t)) { // יש כבר טיסות עם מחיר בדף
           // מחכים שהדף יסיים לטעון: בלי "Fetching results" ומספר המחירים לא משתנה
           const settle = async (max) => {
             let last = -1;
@@ -69,12 +70,14 @@ async function scanOne(ctx, url) {
               await p.waitForTimeout(1500);
               const tx = await p.evaluate(() => document.body.innerText);
               const n = (tx.match(/₪[\d,]+/g) || []).length;
-              if (!/Fetching results|Loading results/.test(tx) && n === last) return;
+              if (n > 0 && n === last) return true; // מספר המחירים לא השתנה — הדף סיים להיטען
               last = n;
             }
+            return false;
           };
-          await settle(12);
-          try { const more = p.getByText('View more flights'); if (await more.count()) { await more.first().click(); await settle(10); } } catch {}
+          // גוגל עוד טוען — לא שומרים תוצאה חלקית, מנסים שוב
+          if (!(await settle(20))) break;
+          try { const more = p.getByText('View more flights'); if (await more.count()) { await more.first().click(); if (!(await settle(14))) break; } } catch {}
           const res = parse(await p.evaluate(() => document.body.innerText));
           await p.close();
           if (res.length) return { status: 'OK', res: res.filter((x, i) => i < 4 || x.stops === 'Nonstop' || x.air.startsWith('El Al')) };
@@ -88,7 +91,20 @@ async function scanOne(ctx, url) {
 }
 
 // הטיסה הכי זולה שמתאימה לטיול: ישירה, ואם נבחרה חברה — רק שלה
-const match = (w) => (x) => x.stops === 'Nonstop' && (!AIR[w.airline] || x.air.startsWith(AIR[w.airline]));
+// --- אפשרויות של טיול: חברות, גמישות בתאריכים, שעות המראה ---
+const AIR_HE = { 'El Al': 'אל על', Israir: 'ישראייר', Arkia: 'ארקיע', Lufthansa: 'לופטהנזה', SWISS: 'סוויס', ITA: 'ITA', Austrian: 'אוסטריאן', 'Wizz Air': 'ויז אייר', easyJet: 'איזיג׳ט', Ryanair: 'ריינאייר', Aegean: 'אג׳יאן' };
+function norm(w) {
+  const airlines = Array.isArray(w.airlines) ? w.airlines : w.airline === 'elal' ? ['El Al'] : [];
+  return { ...w, airlines, flexOut: Math.min(3, +w.flexOut || 0), flexBack: Math.min(3, +w.flexBack || 0), outHours: w.outHours || null, backHours: w.backHours || null };
+}
+const depHour = (dep) => { const m = /(\d{1,2}):(\d\d)\s*([AP])M/.exec(dep || ''); if (!m) return null; return (+m[1] % 12) + (m[3] === 'P' ? 12 : 0) + +m[2] / 60; };
+const inHours = (dep, r) => { if (!r) return true; const h = depHour(dep); return h != null && h >= r[0] && h < r[1]; };
+const match = (w, hours) => (x) => x.stops === 'Nonstop'
+  && (!w.airlines.length || w.airlines.some((a) => x.air.toLowerCase().includes(a.toLowerCase())))
+  && inHours(x.dep, hours);
+const shift = (d, n) => { const t = new Date(d + 'T12:00:00Z'); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+const around = (d, flex) => { const today = new Date().toISOString().slice(0, 10); const o = []; for (let i = -flex; i <= flex; i++) { const x = shift(d, i); if (x >= today) o.push(x); } return o; };
+const airLabel = (w) => !w.airlines.length ? 'כל החברות' : w.airlines.map((a) => AIR_HE[a] || a).join(', ');
 const pick = (res, fn) => (res || []).find(fn) || null; // res ממוין לפי מחיר
 
 let settings = {};
@@ -100,7 +116,7 @@ async function loadWatches() {
     const r = await fetch(`${sb.url}/rest/v1/rpc/flight_get_watches`, { method: 'POST', headers: { apikey: sb.key, 'Content-Type': 'application/json' }, body: '{}' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const w = await r.json();
-    if (Array.isArray(w)) { watches = w; wr('watches.json', w); }
+    if (Array.isArray(w)) { watches = w.map(norm); wr('watches.json', w); }
     // לאן לשלוח התראות — נבחר באתר
     const r2 = await fetch(`${sb.url}/rest/v1/rpc/flight_get_settings`, { method: 'POST', headers: { apikey: sb.key, 'Content-Type': 'application/json' }, body: '{}' });
     if (r2.ok) { const st = await r2.json(); if (st && st.channels) notify.setChannels(st.channels); settings = st || {}; }
@@ -151,7 +167,10 @@ function saveChannelStatus() {
   // אילו חיפושים צריך: שני כיוונים לכל טיול, ופעם ביום גם סקירת כל התאריכים
   const legs = {};
   const add = (from, to, date) => { legs[`${from}|${to}|${date}`] = { from, to, date, url: gfUrl(date, from, to) }; };
-  for (const w of watches) { add(cfg.origin, w.city, w.out); add(w.city, cfg.origin, w.back); }
+  for (const w of watches) {
+    for (const d of around(w.out, w.flexOut)) add(cfg.origin, w.city, d);
+    for (const d of around(w.back, w.flexBack)) add(w.city, cfg.origin, d);
+  }
   const ov = cfg.overview;
   const overviewDue = ov && ov.on && (process.env.FULL || !prev.overviewAt || now - new Date(prev.overviewAt) > 20 * 3600e3);
   if (overviewDue) for (const c of Object.keys(cfg.cities)) {
@@ -204,11 +223,21 @@ function saveChannelStatus() {
   const alerts = [];
   const wOut = {};
   for (const w of watches) {
-    const A = merged[`${cfg.origin}|${w.city}|${w.out}`], B = merged[`${w.city}|${cfg.origin}|${w.back}`];
-    const a = A && pick(A.res, match(w)), b = B && pick(B.res, match(w));
-    const price = a && b ? a.price + b.price : null;
-    wOut[w.id] = { price, out: a, back: b, outUrl: A && A.url, backUrl: B && B.url, stale: !!((A && A.stale) || (B && B.stale)),
-                   none: !!(A && B && A.status !== 'FAIL' && B.status !== 'FAIL' && price == null) };
+    // הצירוף הכי זול מכל התאריכים האפשריים (לפי הגמישות), בשעות ובחברות שנבחרו
+    let best = null, anyMissing = false, allLoaded = true, options = 0;
+    const outs = around(w.out, w.flexOut).map((d) => { const A = merged[`${cfg.origin}|${w.city}|${d}`]; if (!A || A.status === 'FAIL') allLoaded = false; return { d, A, f: A && pick(A.res, match(w, w.outHours)) }; });
+    const backs = around(w.back, w.flexBack).map((d) => { const B = merged[`${w.city}|${cfg.origin}|${d}`]; if (!B || B.status === 'FAIL') allLoaded = false; return { d, B, f: B && pick(B.res, match(w, w.backHours)) }; });
+    for (const o of outs) for (const k of backs) {
+      if (k.d <= o.d || !o.f || !k.f) continue;
+      options++;
+      const p = o.f.price + k.f.price;
+      if (!best || p < best.price) best = { price: p, o, k };
+    }
+    const price = best ? best.price : null;
+    const a = best && best.o.f, b = best && best.k.f;
+    wOut[w.id] = { price, out: a, back: b, outDate: best && best.o.d, backDate: best && best.k.d, options,
+                   outUrl: best && best.o.A.url, backUrl: best && best.k.B.url,
+                   stale: !!(best && (best.o.A.stale || best.k.B.stale)), none: allLoaded && price == null };
     if (price == null) continue;
     const h = (wHist[w.id] = wHist[w.id] || []);
     if (!h.length || h[h.length - 1].price !== price) h.push({ t: now.toISOString(), price });
@@ -220,7 +249,7 @@ function saveChannelStatus() {
     const under = w.target && price <= w.target;
     const firstUnder = under && !s.under;
     if (firstUnder || (s.last != null && s.last - price >= minDrop))
-      alerts.push({ w, price, a, b, why: under ? 'target' : 'drop', from: s.last });
+      alerts.push({ w, price, a, b, od: wOut[w.id].outDate, bd: wOut[w.id].backDate, why: under ? 'target' : 'drop', from: s.last });
     if (w.target) s.under = under ? true : price > w.target + minDrop ? false : s.under;
     s.last = price;
   }
@@ -236,7 +265,8 @@ function saveChannelStatus() {
       const r = wOut[w.id];
       const p = r && r.price != null ? ils(r.price) : 'אין מחיר כרגע';
       const t = w.target ? (r && r.price != null && r.price <= w.target ? ` ✅ מתחת ליעד (${ils(w.target)})` : ` · יעד ${ils(w.target)}`) : '';
-      L.push(`${CITY(w.city)} ${he(w.out)} – ${he(w.back)}: ${p}${t}`);
+      const dd = r && r.outDate ? `${he(r.outDate)} – ${he(r.backDate)}` : `${he(w.out)} – ${he(w.back)}`;
+      L.push(`${CITY(w.city)} ${dd}: ${p}${t}`);
     }
     L.push('', 'המערכת בודקת כל חצי שעה ותשלח הודעה על כל ירידה.');
     if (process.env.PAGE_URL) L.push(process.env.PAGE_URL);
@@ -264,13 +294,12 @@ const he = (d) => { const [, m, day] = d.split('-'); const w = new Date(d + 'T12
 const ils = (n) => '₪' + n.toLocaleString('en-US');
 function message(alerts) {
   const L = [];
-  for (const { w, price, a, b, why, from } of alerts) {
-    const air = AIR[w.airline] ? 'אל על' : 'טיסה ישירה';
-    L.push(`🔔 ${CITY(w.city)} — ${air}`);
+  for (const { w, price, a, b, od, bd, why, from } of alerts) {
+    L.push(`🔔 ${CITY(w.city)} — ${airLabel(w)} (ישיר)`);
     L.push(from != null ? `המחיר ירד מ-${ils(from)} ל-${ils(price)}` : `המחיר עכשיו: ${ils(price)}`);
     if (why === 'target') L.push(`✅ מתחת למחיר שקבעת (${ils(w.target)})!`);
-    L.push(`🛫 הלוך ${he(w.out)}, ${a.dep} (${a.air}) — ${ils(a.price)}`);
-    L.push(`🛬 חזור ${he(w.back)}, ${b.dep} (${b.air}) — ${ils(b.price)}`);
+    L.push(`🛫 הלוך ${he(od)}, ${a.dep} (${a.air}) — ${ils(a.price)}`);
+    L.push(`🛬 חזור ${he(bd)}, ${b.dep} (${b.air}) — ${ils(b.price)}`);
     L.push('');
   }
   L.push('המחיר מ-Google Flights. לפני הזמנה — לבדוק באתר של החברה.');

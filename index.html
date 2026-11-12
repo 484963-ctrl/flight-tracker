@@ -86,6 +86,20 @@
   td.best { background:var(--gold); font-weight:800; }
   .sat td { color:#aaa; }
   .small { font-size:12px; color:var(--mute); display:block; }
+  .tf { display:grid; gap:12px; }
+  .tf label { display:flex; flex-direction:column; gap:5px; font-size:14px; color:var(--mute); font-weight:500; }
+  .tf input, .tf select { font:inherit; font-size:16px; padding:9px 11px; border:1.5px solid #d3dae8; border-radius:12px; background:#fff; color:var(--ink); }
+  .tf input:focus, .tf select:focus { outline:none; border-color:var(--blue); box-shadow:0 0 0 3px rgba(20,80,184,.15); }
+  .tf input[type=number] { width:150px; }
+  .tf .chip input { width:auto; padding:0; }
+  .tf .row { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; }
+  .tf fieldset { border:1.5px solid var(--line); border-radius:14px; padding:10px 12px 12px; margin:0; background:#fbfcff; }
+  .tf legend { font-weight:700; font-size:14px; padding:0 6px; color:var(--blue2); }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; }
+  .chip { display:inline-flex !important; flex-direction:row !important; align-items:center; gap:6px; border:1.5px solid var(--line); border-radius:999px; padding:6px 12px; cursor:pointer; background:#fff; color:var(--ink) !important; font-size:15px !important; }
+  .chip:has(input:checked) { border-color:var(--blue); background:var(--sky); color:var(--blue2) !important; font-weight:700; }
+  .chip input { accent-color:var(--blue); }
+  .opts { font-size:13px; color:var(--mute); margin-top:4px; }
   .chans { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; margin-top:12px; }
   .chan { border:2px solid var(--line); border-radius:16px; padding:14px; background:#fbfcff; transition:border-color .2s, background .2s; }
   .chan.on { border-color:var(--blue); background:var(--sky); }
@@ -128,18 +142,8 @@
 
   <div class="box" id="addBox">
     <b style="font-size:18px">➕ טיול חדש למעקב</b>
-    <div class="form" style="margin-top:10px">
-      <label>לאן
-        <select id="fCity"></select>
-      </label>
-      <label>הלוך<input type="date" id="fOut"></label>
-      <label>חזור<input type="date" id="fBack"></label>
-      <label>חברה
-        <select id="fAir"><option value="elal">אל על (ישיר)</option><option value="any">כל החברות (ישיר)</option></select>
-      </label>
-      <label>להתריע מתחת ל-₪<input type="number" id="fTarget" min="0" step="10" placeholder="למשל 1800"></label>
-      <button class="pri" id="fAdd">הוספה</button>
-    </div>
+    <div id="fForm" style="margin-top:10px"></div>
+    <div class="form" style="margin-top:12px"><button class="pri" id="fAdd">➕ הוספה למעקב</button></div>
     <div class="msg" id="fMsg"></div>
   </div>
 
@@ -220,9 +224,7 @@ function render() {
   $('#addBox').style.display = can ? '' : 'none';
   $('#upd').innerHTML = (L.updated ? `🕒 בדיקה אחרונה: ${ago(L.updated)} · ${new Date(L.updated).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}` : 'עוד אין בדיקות')
     + ' · נבדק כל חצי שעה' + (L.fx && L.fx.rate ? ` · 💵 דולר: ₪${L.fx.rate.toFixed(3)} (${L.fx.src || ''}${L.fx.t ? ', ' + new Date(L.fx.t).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''})` : '');
-  if (!$('#fCity').options.length && CFG.cities) {
-    $('#fCity').innerHTML = Object.entries(CFG.cities).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
-  }
+  if (!$('#fForm').innerHTML && CFG.cities) { $('#fForm').innerHTML = tripForm('f'); bindAddForm(); }
 
   const cards = W.map((w) => card(w, can)).join('');
   $('#cards').innerHTML = cards || `<div class="box empty">עוד אין טיולים במעקב. ${can ? 'מוסיפים טיול למעלה.' : 'לוחצים "🔑 חיבור לעריכה" כדי להוסיף.'}</div>`;
@@ -232,6 +234,54 @@ function render() {
   renderOverview();
 }
 
+// --- אפשרויות טיול: גמישות בתאריכים, שעות המראה, חברות ---
+const AIRS = [['El Al', 'אל על'], ['Israir', 'ישראייר'], ['Arkia', 'ארקיע'], ['Lufthansa', 'לופטהנזה'], ['SWISS', 'סוויס'], ['ITA', 'ITA'], ['Austrian', 'אוסטריאן'], ['Wizz Air', 'ויז אייר'], ['easyJet', 'איזיג׳ט'], ['Ryanair', 'ריינאייר']];
+const airsOf = (w) => Array.isArray(w.airlines) ? w.airlines : w.airline === 'elal' ? ['El Al'] : [];
+const airText = (w) => { const a = airsOf(w); return a.length ? a.map((x) => (AIRS.find((y) => y[0] === x) || [x, x])[1]).join(', ') : 'כל החברות'; };
+const hh = (n) => String(n).padStart(2, '0') + ':00';
+function hoursSel(id, r) {
+  const f = r ? r[0] : '', t = r ? r[1] : '';
+  return `<label>מ-<select id="${id}F"><option value="">כל שעה</option>${Array.from({ length: 24 }, (_, i) => `<option value="${i}" ${f === i ? 'selected' : ''}>${hh(i)}</option>`).join('')}</select></label>
+    <label>עד<select id="${id}T"><option value="">כל שעה</option>${Array.from({ length: 24 }, (_, i) => i + 1).map((i) => `<option value="${i}" ${t === i ? 'selected' : ''}>${hh(i)}</option>`).join('')}</select></label>`;
+}
+const flexSel = (id, v) => `<label>גמישות<select id="${id}"><option value="0">בדיוק בתאריך</option>${[1, 2, 3].map((n) => `<option value="${n}" ${+v === n ? 'selected' : ''}>± ${n} ${n === 1 ? 'יום' : 'ימים'}</option>`).join('')}</select></label>`;
+function tripForm(p, w = {}) {
+  const airs = w.id ? airsOf(w) : ['El Al'];
+  return `<div class="tf">
+    <div class="row">
+      ${p === 'f' ? `<label>לאן<select id="${p}City">${Object.entries(CFG.cities || {}).map(([k, v]) => `<option value="${k}" ${w.city === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>` : ''}
+      <label>להתריע מתחת ל-₪<input type="number" id="${p}Target" min="0" step="10" placeholder="למשל 1800" value="${w.target || ''}"></label>
+    </div>
+    <fieldset><legend>🛫 הלוך</legend><div class="row">
+      <label>תאריך<input type="date" id="${p}Out" value="${w.out || ''}"></label>${flexSel(p + 'FlexO', w.flexOut)}
+      <span style="align-self:center;color:var(--mute);font-size:14px">שעת המראה:</span>${hoursSel(p + 'HO', w.outHours)}</div></fieldset>
+    <fieldset><legend>🛬 חזור</legend><div class="row">
+      <label>תאריך<input type="date" id="${p}Back" value="${w.back || ''}"></label>${flexSel(p + 'FlexB', w.flexBack)}
+      <span style="align-self:center;color:var(--mute);font-size:14px">שעת המראה:</span>${hoursSel(p + 'HB', w.backHours)}</div></fieldset>
+    <fieldset><legend>✈️ חברות תעופה (טיסות ישירות) — בלי סימון = כל החברות</legend>
+      <div class="chips">${AIRS.map(([k, he]) => `<label class="chip"><input type="checkbox" data-air="${p}" value="${k}" ${airs.includes(k) ? 'checked' : ''}> ${he}</label>`).join('')}</div></fieldset>
+  </div>`;
+}
+function readTrip(p) {
+  const hrs = (id) => { const f = $(`#${id}F`).value, t = $(`#${id}T`).value; return f === '' && t === '' ? null : [f === '' ? 0 : +f, t === '' ? 24 : +t]; };
+  return { out: $(`#${p}Out`).value, back: $(`#${p}Back`).value, target: +$(`#${p}Target`).value || null,
+    flexOut: +$(`#${p}FlexO`).value, flexBack: +$(`#${p}FlexB`).value, outHours: hrs(p + 'HO'), backHours: hrs(p + 'HB'),
+    airlines: [...document.querySelectorAll(`[data-air="${p}"]:checked`)].map((x) => x.value) };
+}
+function checkTrip(t) {
+  if (!t.out || !t.back) return 'צריך לבחור תאריך הלוך ותאריך חזור.';
+  if (t.back <= t.out) return 'תאריך החזור צריך להיות אחרי ההלוך.';
+  for (const h of [t.outHours, t.backHours]) if (h && h[1] <= h[0]) return 'בשעות ההמראה: שעת הסיום צריכה להיות אחרי שעת ההתחלה.';
+  return '';
+}
+function optsText(w) {
+  const o = [];
+  if (w.flexOut || w.flexBack) o.push(`גמיש: הלוך ±${w.flexOut || 0}, חזור ±${w.flexBack || 0} ימים`);
+  if (w.outHours) o.push(`המראה בהלוך ${hh(w.outHours[0])}–${hh(w.outHours[1])}`);
+  if (w.backHours) o.push(`המראה בחזור ${hh(w.backHours[0])}–${hh(w.backHours[1])}`);
+  return o.join(' · ');
+}
+
 function card(w, can) {
   const r = (L.watches || {})[w.id];
   const h = (WH[w.id] || []);
@@ -239,7 +289,7 @@ function card(w, can) {
   const hit = price != null && w.target && price <= w.target;
   const prevP = h.length > 1 ? h[h.length - 2].price : null;
   const low = h.length ? h.reduce((a, b) => b.price < a.price ? b : a) : null;
-  const air = w.airline === 'elal' ? 'אל על · טיסה ישירה' : 'כל החברות · טיסה ישירה';
+  const air = airText(w) + ' · טיסה ישירה';
   let chg = '';
   if (price != null && prevP != null && Math.abs(price - prevP) >= 5) chg = price < prevP ? `<span class="dn">▼ ירד ב-${ils(prevP - price)}</span> מהבדיקה הקודמת` : price > prevP ? `<span class="up">▲ עלה ב-${ils(price - prevP)}</span> מהבדיקה הקודמת` : 'ללא שינוי';
   else if (price != null && h.length) chg = 'ללא שינוי';
@@ -258,22 +308,21 @@ function card(w, can) {
       <div class="cap"><div class="city">${CFG.cities && CFG.cities[w.city] || w.city}</div><div class="air">${air}</div></div>
     </div>
     <div class="cb">
-    <div class="dates">📅 ${dayName(w.out)} ${heD(w.out)} ← ${dayName(w.back)} ${heD(w.back)} · ${nights(w.out, w.back)} לילות</div>
+    ${(() => { const o = (r && r.outDate) || w.out, b = (r && r.backDate) || w.back, flex = w.flexOut || w.flexBack;
+      return `<div class="dates">📅 ${flex && r && r.outDate ? 'הכי זול: ' : ''}${dayName(o)} ${heD(o)} ← ${dayName(b)} ${heD(b)} · ${nights(o, b)} לילות</div>
+      ${optsText(w) ? `<div class="opts">⚙️ ${optsText(w)}${flex ? ` · ביקשת ${heD(w.out)} ← ${heD(w.back)}` : ''}</div>` : ''}`; })()}
     ${status}
     ${badge}
     <div class="chg">${chg}${r && r.stale ? ' · <span class="up">חלק מהמחיר מבדיקה קודמת</span>' : ''}</div>
     ${low && h.length > 2 ? `<div class="low">הכי נמוך שראינו: <b>${ils(low.price)}</b> (${new Date(low.t).toLocaleDateString('he-IL')})</div>` : ''}
     ${spark(h)}
-    <div class="legs">${leg('🛫 הלוך', w.out, r && r.out, r && r.outUrl)}${leg('🛬 חזור', w.back, r && r.back, r && r.backUrl)}</div>
+    <div class="legs">${leg('🛫 הלוך', (r && r.outDate) || w.out, r && r.out, r && r.outUrl)}${leg('🛬 חזור', (r && r.backDate) || w.back, r && r.back, r && r.backUrl)}</div>
     ${can ? `<div class="tools">
-      <button class="ghost" data-edit="${w.id}">✎ עריכה (תאריכים ומחיר)</button>
+      <button class="ghost" data-edit="${w.id}">✎ עריכה</button>
       <button class="ghost" data-del="${w.id}">🗑 מחיקה</button></div>` : ''}
-    ${editT === w.id ? `<div class="form" style="margin-top:8px">
-      <label>הלוך<input type="date" id="eO" value="${w.out}"></label>
-      <label>חזור<input type="date" id="eB" value="${w.back}"></label>
-      <label>להתריע מתחת ל-₪<input type="number" id="eT" value="${w.target || ''}" step="10"></label>
-      <button class="pri" data-esave="${w.id}">שמירה</button><button data-ecancel>ביטול</button></div>
-      <div class="msg err" id="eMsg"></div>` : ''}
+    ${editT === w.id ? `<div style="margin-top:10px">${tripForm('e', w)}
+      <div class="form" style="margin-top:10px"><button class="pri" data-esave="${w.id}">שמירה</button><button data-ecancel>ביטול</button></div>
+      <div class="msg err" id="eMsg"></div></div>` : ''}
     ${confirmDel === w.id ? `<div class="confirm">למחוק את הטיול הזה מהמעקב? <button class="pri" style="background:var(--red);border-color:var(--red)" data-dyes="${w.id}">כן, למחוק</button> <button data-dno>לא</button></div>` : ''}
     </div>
   </div>`;
@@ -305,16 +354,17 @@ function bindCards() {
   document.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => { editT = b.dataset.edit; confirmDel = null; render(); });
   document.querySelectorAll('[data-ecancel]').forEach((b) => b.onclick = () => { editT = null; render(); });
   document.querySelectorAll('[data-esave]').forEach((b) => b.onclick = async () => {
-    const t = +$('#eT').value || null, o = $('#eO').value, bk = $('#eB').value;
-    if (!o || !bk) return $('#eMsg').textContent = 'צריך תאריך הלוך ותאריך חזור.';
-    if (bk <= o) return $('#eMsg').textContent = 'תאריך החזור צריך להיות אחרי ההלוך.';
+    const t = readTrip('e'), err = checkTrip(t);
+    if (err) return $('#eMsg').textContent = err;
     b.disabled = true;
     try {
       const list = W.map((w) => {
         if (w.id !== b.dataset.esave) return w;
-        const moved = w.out !== o || w.back !== bk;
-        // תאריכים חדשים = טיול חדש: מתחילים מעקב (וגרף) מחדש
-        return { ...w, id: moved ? 'w' + Date.now().toString(36) : w.id, out: o, back: bk, target: t };
+        const same = (k) => JSON.stringify(k === 'airlines' ? airsOf(w) : w[k] ?? null) === JSON.stringify(t[k] ?? null);
+        const moved = !['out', 'back', 'flexOut', 'flexBack', 'outHours', 'backHours', 'airlines'].every((k) => k === 'flexOut' || k === 'flexBack' ? (+w[k] || 0) === t[k] : same(k));
+        // טיסות אחרות = טיול חדש: מתחילים מעקב (וגרף) מחדש
+        const { airline, ...rest } = w;
+        return { ...rest, ...t, id: moved ? 'w' + Date.now().toString(36) : w.id };
       });
       editT = null; await saveWatches(list);
     } catch (e) { $('#eMsg').textContent = e.message; b.disabled = false; }
@@ -395,23 +445,23 @@ function renderOverview() {
 
 // --- טופס הוספה ---
 $('#fAdd').onclick = async () => {
-  const w = { id: 'w' + Date.now().toString(36), city: $('#fCity').value, out: $('#fOut').value, back: $('#fBack').value, airline: $('#fAir').value, target: +$('#fTarget').value || null };
+  const w = { id: 'w' + Date.now().toString(36), city: $('#fCity').value, ...readTrip('f') };
   const m = $('#fMsg');
   m.className = 'msg err';
-  if (!w.out || !w.back) return m.textContent = 'צריך לבחור תאריך הלוך ותאריך חזור.';
-  if (w.back <= w.out) return m.textContent = 'תאריך החזור צריך להיות אחרי ההלוך.';
+  const err = checkTrip(w);
+  if (err) return m.textContent = err;
   if (w.out < new Date().toISOString().slice(0, 10)) return m.textContent = 'תאריך ההלוך כבר עבר.';
-  if (W.find((x) => x.city === w.city && x.out === w.out && x.back === w.back && x.airline === w.airline)) return m.textContent = 'הטיול הזה כבר במעקב.';
+  if (W.find((x) => x.city === w.city && x.out === w.out && x.back === w.back && JSON.stringify(airsOf(x)) === JSON.stringify(w.airlines) && (+x.flexOut || 0) === w.flexOut && (+x.flexBack || 0) === w.flexBack)) return m.textContent = 'הטיול הזה כבר במעקב.';
   $('#fAdd').disabled = true;
   m.className = 'msg'; m.textContent = 'שומר…';
   try {
     await saveWatches([...W, w]);
     m.className = 'msg ok'; m.textContent = '✓ נוסף! המחיר יופיע תוך חצי שעה, ומאז תקבל עדכון על כל ירידה.';
-    $('#fTarget').value = '';
+    $('#fForm').innerHTML = tripForm('f'); bindAddForm();
   } catch (e) { m.className = 'msg err'; m.textContent = e.message; }
   $('#fAdd').disabled = false;
 };
-$('#fOut').onchange = () => { if (!$('#fBack').value || $('#fBack').value <= $('#fOut').value) { const d = new Date($('#fOut').value); d.setDate(d.getDate() + 7); $('#fBack').value = d.toISOString().slice(0, 10); } };
+function bindAddForm() { $('#fOut').onchange = () => { if (!$('#fBack').value || $('#fBack').value <= $('#fOut').value) { const d = new Date($('#fOut').value); d.setDate(d.getDate() + 7); $('#fBack').value = d.toISOString().slice(0, 10); } }; }
 
 // --- כניסה בקוד ---
 $('#btnKey').onclick = () => { const b = $('#keyBox'); b.style.display = b.style.display === 'none' ? '' : 'none'; };
@@ -428,7 +478,7 @@ $('#delTok').onclick = () => { setCode(''); $('#tokMsg').textContent = 'יצאת
 
 load();
 let tick = 0;
-setInterval(() => { tick++; if (tick % 5 === 0) load(); }, 60 * 1000);
+setInterval(() => { tick++; if (tick % 5 === 0 && !editT) load(); }, 60 * 1000);
 </script>
 </body>
 </html>
