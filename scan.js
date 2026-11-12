@@ -227,6 +227,8 @@ function saveChannelStatus() {
   // שומרים גם חיפושים ישנים שלא נבדקו הפעם (הסקירה היומית); דף שלא נטען — המחיר הקודם, מסומן כישן
   const merged = { ...legsPrev };
   for (const [k, r] of Object.entries(legs)) merged[k] = r.status === 'FAIL' && legsPrev[k] && legsPrev[k].res.length ? { ...legsPrev[k], stale: true } : r;
+  // סימון לכל טיסה אם היא בסדר מבחינת שבת וחג (לטבלת "כל התאריכים" באתר)
+  for (const r of Object.values(merged)) for (const x of r.res || []) x.sh = shabbatOk(r.date, x.dep, x.arr, r.from, r.to);
   const okCount = Object.values(legs).filter((r) => r.status === 'OK').length;
   if (keys.length && okCount < keys.length * 0.3) {
     console.log(`רק ${okCount}/${keys.length} נטענו — לא שומרים`);

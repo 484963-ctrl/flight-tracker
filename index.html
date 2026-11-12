@@ -444,18 +444,21 @@ function renderOverview() {
   document.querySelectorAll('[data-ov]').forEach((b) => b.onclick = () => { ovCity = b.dataset.ov; renderOverview(); });
   const days = (a, b) => { const o = []; for (let d = new Date(a + 'T12:00:00Z'); d <= new Date(b + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)) o.push(d.toISOString().slice(0, 10)); return o; };
   const table = (from, to, list) => {
-    const rows = list.map((d) => { const r = legs[`${from}|${to}|${d}`]; const ns = r ? r.res.filter((x) => x.stops === 'Nonstop') : [];
-      return { d, url: r && r.url, el: ns.find((x) => x.air.startsWith('El Al')), any: ns[0] }; });
+    // רק טיסות שלא בשבת/חג (x.sh מחושב בבדיקה); יום שיש בו רק טיסות בשבת — מסומן 🕯️
+    const rows = list.map((d) => { const r = legs[`${from}|${to}|${d}`]; const all = r ? r.res.filter((x) => x.stops === 'Nonstop') : [];
+      const ns = all.filter((x) => x.sh !== false);
+      return { d, url: r && r.url, el: ns.find((x) => x.air.startsWith('El Al')), any: ns[0], onlySh: all.length > 0 && !ns.length,
+               elSh: !ns.find((x) => x.air.startsWith('El Al')) && all.some((x) => x.air.startsWith('El Al')) }; });
     const mE = Math.min(...rows.filter((x) => x.el).map((x) => x.el.price)), mA = Math.min(...rows.filter((x) => x.any).map((x) => x.any.price));
     return `<table><tr><th>תאריך</th><th>אל על</th><th>הכי זול ישיר</th></tr>${rows.map((x) => `<tr class="${new Date(x.d + 'T12:00:00Z').getUTCDay() === 6 ? 'sat' : ''}">
       <td>${heD(x.d)}<span class="small">${dayName(x.d)}</span></td>
-      <td class="${x.el && x.el.price === mE ? 'best' : ''}">${x.el ? ils(x.el.price) + usdTag(x.el.price, 'small') + `<span class="small">${ltr(x.el.dep)}</span>` : '—'}</td>
-      <td class="${x.any && x.any.price === mA ? 'best' : ''}">${x.any ? ils(x.any.price) + usdTag(x.any.price, 'small') + `<span class="small">${x.any.air}</span>` : '—'}</td></tr>`).join('')}</table>`;
+      <td class="${x.el && x.el.price === mE ? 'best' : ''}">${x.el ? ils(x.el.price) + usdTag(x.el.price, 'small') + `<span class="small">${ltr(x.el.dep)}</span>` : x.elSh ? '<span class="small">🕯️ רק בשבת/חג</span>' : '—'}</td>
+      <td class="${x.any && x.any.price === mA ? 'best' : ''}">${x.any ? ils(x.any.price) + usdTag(x.any.price, 'small') + `<span class="small">${x.any.air}</span>` : x.onlySh ? '<span class="small">🕯️ רק בשבת/חג</span>' : '—'}</td></tr>`).join('')}</table>`;
   };
   $('#ov').innerHTML = `<div class="grid2">
     <div><b>🛫 הלוך</b>${table(CFG.origin, ovCity, days(ov.outFrom, ov.outTo))}</div>
     <div><b>🛬 חזור</b>${table(ovCity, CFG.origin, days(ov.backFrom, ov.backTo))}</div></div>
-    <div class="note">רקע צהוב = הכי זול בטור. מחיר לכיוון אחד. ${L.overviewAt ? 'עודכן ' + ago(L.overviewAt) : ''}</div>`;
+    <div class="note">רקע צהוב = הכי זול בטור. מחיר לכיוון אחד. בלי טיסות בשבת וחג (🕯️ = באותו יום יש רק טיסות בשבת/חג). ${L.overviewAt ? 'עודכן ' + ago(L.overviewAt) : ''}</div>`;
 }
 
 // --- טופס הוספה ---
