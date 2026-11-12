@@ -76,9 +76,9 @@
   .legs bdi { white-space:nowrap; }
   .cov { font-size:14px; margin:2px 0 6px; padding:6px 10px; border-radius:10px; background:#f3f5f9; color:var(--ink); }
   .cov.ok { background:var(--greenbg); color:var(--green); font-weight:600; }
-  .clist { margin:6px 0 8px; border:1px solid var(--line); border-radius:12px; overflow:hidden; font-size:13px; }
+  .clist { container-type:inline-size; margin:6px 0 8px; border:1px solid var(--line); border-radius:12px; overflow:hidden; font-size:13px; }
   .clh { padding:6px 10px; background:#f3f5f9; color:var(--mute); font-weight:600; }
-  .crow { display:grid; grid-template-columns: 1.1fr .8fr 2.4fr auto; gap:6px; padding:6px 10px; border-top:1px solid var(--line); color:var(--ink); text-decoration:none; align-items:center; }
+  .crow { display:grid; grid-template-columns: auto auto 1fr auto; white-space:nowrap; gap:5px; padding:6px 8px; font-size:12.5px; border-top:1px solid var(--line); color:var(--ink); text-decoration:none; align-items:center; }
   a.crow:hover { background:var(--sky); }
   .crow.best { background:var(--greenbg); font-weight:700; }
   .crow .cp { font-weight:700; }
@@ -86,7 +86,9 @@
   .crow .cl { font-size:12px; white-space:nowrap; }
   .crow .cl a { color:var(--blue); text-decoration:none; font-weight:600; }
   .crow .cl a:hover { text-decoration:underline; }
-  .crow .cd { color:var(--mute); font-size:12px; }
+  .crow .cd { color:var(--mute); font-size:12px; overflow:hidden; text-overflow:ellipsis; }
+  @container (max-width: 380px) { .crow .cl .t { display:none; } .crow small { font-size:10px; } }
+  .crow small { font-size:11px; color:var(--mute); font-weight:500; }
   .gbtn { display:block; text-align:center; margin-top:10px; padding:10px; border-radius:12px; background:var(--sky); color:var(--blue2) !important; font-weight:700; text-decoration:none; }
   .gbtn:hover { background:#dce8ff; }
   .low { font-size:14px; color:var(--mute); margin-top:6px; }
@@ -453,10 +455,12 @@ function card(w, can) {
   const cityList = many ? `<div class="clist"><div class="clh">📍 הכי זול בכל יעד בטווח שלך${pc > 1 ? ' (לנוסע)' : ''}:</div>${(r && r.cities ? [...r.cities].sort((a, b) => (a.price ?? 1e9) - (b.price ?? 1e9)) : citiesOfW(w).map((c) => ({ city: c })))
       .map((c) => { const star = c.city === cityNow && r && r.price != null;
         const air = c.outAir ? [...new Set([c.outAir, c.backAir].filter(Boolean))].join(' / ') : '';
-        const inner = `<span class="cn">${star ? '⭐ ' : ''}${cname(c.city)}${w.drive && w.drive[c.city] ? `<span class="cu">🚗 ${hm(w.drive[c.city])} נסיעה</span>` : ''}</span>
-          <span class="cp">${c.price != null ? (() => { const v = pc > 1 ? Math.round(c.price / pc) : c.price; return ils(v) + (usd(v) ? `<span class="cu"><bdi dir="ltr">≈ ${usd(v)}</bdi></span>` : ''); })() : c.none ? '—' : '⏳'}</span>
-          <span class="cd">${c.price != null ? `${dayName(c.outDate)} ${heD(c.outDate)} ← ${dayName(c.backDate)} ${heD(c.backDate)}${air ? ' · <bdi style="white-space:nowrap">' + air + '</bdi>' : ''}` : c.none ? (c.why === 'nodirect' ? '✈️ אין טיסות ישירות מתל אביב בתאריכים האלה' : 'יש טיסות ישירות, אבל לא לפי ההגדרות שלך (חברה, שעות, שבת)') : 'בודק…'}</span>`;
-        const links = `<span class="cl">${c.price != null ? `<a href="${gfRound(c.outDate, c.backDate, CFG.origin || 'TLV', c.city, px)}" target="_blank" title="לראות את הטיסות בגוגל טיסות">✈️ טיסות</a>` : ''}</span>`;
+        const sd = (d) => `${dayName(d).replace('יום ', '')} ${heD(d)}`;
+        const v = c.price != null ? (pc > 1 ? Math.round(c.price / pc) : c.price) : null;
+        const inner = `<span class="cn">${star ? '⭐ ' : ''}${cname(c.city)}${w.drive && w.drive[c.city] ? ` <small>🚗${hm(w.drive[c.city])}</small>` : ''}</span>
+          <span class="cp">${v != null ? `${ils(v)}${usd(v) ? ` <small><bdi dir="ltr">≈${usd(v)}</bdi></small>` : ''}` : c.none ? '—' : '⏳'}</span>
+          <span class="cd" title="${c.price != null ? `${dayName(c.outDate)} ${heD(c.outDate)} ← ${dayName(c.backDate)} ${heD(c.backDate)}${air ? ' · ' + air : ''}` : ''}">${c.price != null ? `${heD(c.outDate)} ← ${heD(c.backDate)}` : c.none ? (c.why === 'nodirect' ? '✈️ אין טיסות ישירות מתל אביב' : 'יש ישירות, לא לפי ההגדרות שלך') : 'בודק…'}</span>`;
+        const links = `<span class="cl">${c.price != null ? `<a href="${gfRound(c.outDate, c.backDate, CFG.origin || 'TLV', c.city, px)}" target="_blank" title="לראות את הטיסות בגוגל טיסות">✈️<span class="t"> טיסות</span></a>` : ''}</span>`;
         return `<div class="crow ${star ? 'best' : ''}">${inner}${links}</div>`; }).join('')}</div>` : '';
   return `<div class="card ${hit ? 'hit' : ''}">
     <div class="photo" style="background-image:url(img/${img}.jpg)">

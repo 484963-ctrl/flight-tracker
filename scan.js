@@ -177,7 +177,7 @@ async function gridSearch(ctx, o, b, from, to, pax) {
 }
 async function gridSearch1(ctx, o, b, from, to, pax) {
   const url = `https://www.google.com/travel/flights/search?tfs=${encodeURIComponent(tfsRT(o, b, from, to, pax))}&hl=en&curr=ILS`;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     const p = await ctx.newPage();
     try {
       await p.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
@@ -186,7 +186,7 @@ async function gridSearch1(ctx, o, b, from, to, pax) {
       if (!(await btn.count())) throw new Error('אין טבלת תאריכים');
       await btn.first().click();
       let cells = [];
-      for (let i = 0; i < 20; i++) {
+      for (let i = 0; i < 30; i++) {
         await p.waitForTimeout(1500);
         cells = await p.evaluate(() => [...document.querySelectorAll('[role=dialog] [role=button][aria-label]')].map((e) => e.getAttribute('aria-label')).filter((a) => /^₪[\d,]+, [A-Z][a-z]{2} \d{1,2} to [A-Z][a-z]{2} \d{1,2}$/.test(a)));
         if (cells.length >= 10) break;
