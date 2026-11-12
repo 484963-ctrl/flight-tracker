@@ -260,6 +260,7 @@ function tripForm(p, w = {}) {
     <div class="row">
       ${p === 'f' ? `<label>לאן<select id="${p}City">${Object.entries(CFG.cities || {}).map(([k, v]) => `<option value="${k}" ${w.city === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>` : ''}
       <label>להתריע מתחת ל-₪<input type="number" id="${p}Target" min="0" step="10" placeholder="למשל 1800" value="${w.target || ''}"></label>
+      <label class="chip" style="align-self:flex-end" title="לא טסים ולא נוחתים מ-3 שעות לפני השקיעה של ערב שבת/חג ועד 3 שעות אחרי צאת השבת (50 דקות אחרי השקיעה)"><input type="checkbox" id="${p}NoSh" ${w.noShabbat === false ? '' : 'checked'}> 🕯️ בלי טיסות בשבת וחג</label>
     </div>
     <fieldset><legend>🛫 הלוך</legend><div class="row">
       <label>תאריך<input type="date" id="${p}Out" value="${w.out || ''}"></label>${flexSel(p + 'FlexO', baOf(w, 'out'))}
@@ -275,7 +276,7 @@ function readTrip(p) {
   const hrs = (id) => { const f = $(`#${id}F`).value, t = $(`#${id}T`).value; return f === '' && t === '' ? null : [f === '' ? 0 : +f, t === '' ? 24 : +t]; };
   return { out: $(`#${p}Out`).value, back: $(`#${p}Back`).value, target: +$(`#${p}Target`).value || null,
     flexOutBefore: +$(`#${p}FlexOB`).value, flexOutAfter: +$(`#${p}FlexOA`).value, flexBackBefore: +$(`#${p}FlexBB`).value, flexBackAfter: +$(`#${p}FlexBA`).value, outHours: hrs(p + 'HO'), backHours: hrs(p + 'HB'),
-    airlines: [...document.querySelectorAll(`[data-air="${p}"]:checked`)].map((x) => x.value) };
+    airlines: [...document.querySelectorAll(`[data-air="${p}"]:checked`)].map((x) => x.value), noShabbat: $(`#${p}NoSh`).checked };
 }
 function checkTrip(t) {
   if (!t.out || !t.back) return 'צריך לבחור תאריך הלוך ותאריך חזור.';
@@ -290,6 +291,7 @@ function optsText(w) {
   const leg = (n, [b, a]) => (b || a) ? `${n}: ${[b ? `${flexName(b)} לפני` : '', a ? `${flexName(a)} אחרי` : ''].filter(Boolean).join(' ו')}` : '';
   const f = [leg('הלוך', baOf(w, 'out')), leg('חזור', baOf(w, 'back'))].filter(Boolean);
   if (f.length) o.push('גמיש — ' + f.join(' · '));
+  if (w.noShabbat !== false) o.push('🕯️ בלי שבת וחג');
   if (w.outHours) o.push(`המראה בהלוך ${hh(w.outHours[0])}–${hh(w.outHours[1])}`);
   if (w.backHours) o.push(`המראה בחזור ${hh(w.backHours[0])}–${hh(w.backHours[1])}`);
   return o.join(' · ');
@@ -374,7 +376,7 @@ function bindCards() {
       const list = W.map((w) => {
         if (w.id !== b.dataset.esave) return w;
         const same = (k) => JSON.stringify(k === 'airlines' ? airsOf(w) : w[k] ?? null) === JSON.stringify(t[k] ?? null);
-        const moved = !['out', 'back', 'outHours', 'backHours', 'airlines'].every(same) || JSON.stringify([...baOf(w, 'out'), ...baOf(w, 'back')]) !== JSON.stringify([t.flexOutBefore, t.flexOutAfter, t.flexBackBefore, t.flexBackAfter]);
+        const moved = !['out', 'back', 'outHours', 'backHours', 'airlines'].every(same) || (w.noShabbat !== false) !== t.noShabbat || JSON.stringify([...baOf(w, 'out'), ...baOf(w, 'back')]) !== JSON.stringify([t.flexOutBefore, t.flexOutAfter, t.flexBackBefore, t.flexBackAfter]);
         // טיסות אחרות = טיול חדש: מתחילים מעקב (וגרף) מחדש
         const { airline, flexOut, flexBack, flexOutDir, flexBackDir, ...rest } = w;
         return { ...rest, ...t, id: moved ? 'w' + Date.now().toString(36) : w.id };

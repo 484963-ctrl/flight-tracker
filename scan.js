@@ -100,7 +100,8 @@ function norm(w) {
   return { ...w, airlines, flexOut: Math.min(3, Math.max(0, +w.flexOut || 0)), flexBack: Math.min(3, Math.max(0, +w.flexBack || 0)), outHours: w.outHours || null, backHours: w.backHours || null,
     // כמה גמישות לפני התאריך ואחריו (בימים; 0.25 = 6 שעות). תיקים ישנים: flex + כיוון
     outBefore: ba(w.flexOutBefore, w.flexOut, w.flexOutDir, 'before'), outAfter: ba(w.flexOutAfter, w.flexOut, w.flexOutDir, 'after'),
-    backBefore: ba(w.flexBackBefore, w.flexBack, w.flexBackDir, 'before'), backAfter: ba(w.flexBackAfter, w.flexBack, w.flexBackDir, 'after') };
+    backBefore: ba(w.flexBackBefore, w.flexBack, w.flexBackDir, 'before'), backAfter: ba(w.flexBackAfter, w.flexBack, w.flexBackDir, 'after'),
+    noShabbat: w.noShabbat !== false };
 }
 const depHour = (dep) => { const m = /(\d{1,2}):(\d\d)\s*([AP])M/.exec(dep || ''); if (!m) return null; return (+m[1] % 12) + (m[3] === 'P' ? 12 : 0) + +m[2] / 60; };
 const inHours = (dep, r) => { if (!r) return true; const h = depHour(dep); return h != null && h >= r[0] && h < r[1]; };
@@ -118,6 +119,8 @@ const inFlex = (d, base, before, after, dep) => {
   const t = (new Date(d + 'T12:00:00Z') - new Date(base + 'T12:00:00Z')) / 36e5 + h;
   return t >= -before * 24 && t < 24 + after * 24;
 };
+// שבת וחג (shabbat.mjs) — נטען בתחילת הריצה
+let shabbatOk = () => true;
 const airLabel = (w) => !w.airlines.length ? 'כל החברות' : w.airlines.map((a) => AIR_HE[a] || a).join(', ');
 const pick = (res, fn) => (res || []).find(fn) || null; // res ממוין לפי מחיר
 
@@ -163,6 +166,7 @@ function saveChannelStatus() {
 }
 
 (async () => {
+  try { shabbatOk = (await import('./shabbat.mjs')).makeChecker(cfg.shabbat || {}); } catch (e) { console.log('שבת: לא נטען —', e.message); }
   await loadWatches();
   watches = watches.map(norm);
   const now = new Date();
@@ -240,8 +244,8 @@ function saveChannelStatus() {
   for (const w of watches) {
     // הצירוף הכי זול מכל התאריכים האפשריים (לפי הגמישות), בשעות ובחברות שנבחרו
     let best = null, anyMissing = false, allLoaded = true, options = 0;
-    const outs = around(w.out, w.outBefore, w.outAfter).map((d) => { const A = merged[`${cfg.origin}|${w.city}|${d}`]; if (!A || A.status === 'FAIL') allLoaded = false; const m = match(w, w.outHours); return { d, A, f: A && pick(A.res, (x) => m(x) && inFlex(d, w.out, w.outBefore, w.outAfter, x.dep)) }; });
-    const backs = around(w.back, w.backBefore, w.backAfter).map((d) => { const B = merged[`${w.city}|${cfg.origin}|${d}`]; if (!B || B.status === 'FAIL') allLoaded = false; const m = match(w, w.backHours); return { d, B, f: B && pick(B.res, (x) => m(x) && inFlex(d, w.back, w.backBefore, w.backAfter, x.dep)) }; });
+    const outs = around(w.out, w.outBefore, w.outAfter).map((d) => { const A = merged[`${cfg.origin}|${w.city}|${d}`]; if (!A || A.status === 'FAIL') allLoaded = false; const m = match(w, w.outHours); return { d, A, f: A && pick(A.res, (x) => m(x) && inFlex(d, w.out, w.outBefore, w.outAfter, x.dep) && (!w.noShabbat || shabbatOk(d, x.dep, x.arr, cfg.origin, w.city))) }; });
+    const backs = around(w.back, w.backBefore, w.backAfter).map((d) => { const B = merged[`${w.city}|${cfg.origin}|${d}`]; if (!B || B.status === 'FAIL') allLoaded = false; const m = match(w, w.backHours); return { d, B, f: B && pick(B.res, (x) => m(x) && inFlex(d, w.back, w.backBefore, w.backAfter, x.dep) && (!w.noShabbat || shabbatOk(d, x.dep, x.arr, w.city, cfg.origin))) }; });
     for (const o of outs) for (const k of backs) {
       if (k.d <= o.d || !o.f || !k.f) continue;
       options++;
