@@ -45,6 +45,8 @@ jobs:
           first=1
           while :; do
             echo "=== בדיקה $(date -u +%H:%M) UTC"
+            # הגרסה הכי חדשה של הקוד והנתונים — שינויים נכנסים לעבודה בלי להפעיל מחדש
+            git pull -q --rebase -X ours origin main || echo "git pull נכשל, ממשיכים עם מה שיש"
             TEST_NOTIFY=$([ -n "$first" ] && echo "$FIRST_TEST") node scan.js || echo "הבדיקה נכשלה, ממשיכים"
             first=
             git add data watches.json
