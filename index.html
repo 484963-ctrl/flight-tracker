@@ -74,6 +74,8 @@
   .legs { margin-top:12px; border-top:1px dashed var(--line); padding-top:10px; font-size:14px; line-height:1.9; }
   .legs a { color:var(--blue); }
   .legs bdi { white-space:nowrap; }
+  .cov { font-size:14px; margin:2px 0 6px; padding:6px 10px; border-radius:10px; background:#f3f5f9; color:var(--ink); }
+  .cov.ok { background:var(--greenbg); color:var(--green); font-weight:600; }
   .gbtn { display:block; text-align:center; margin-top:10px; padding:10px; border-radius:12px; background:var(--sky); color:var(--blue2) !important; font-weight:700; text-decoration:none; }
   .gbtn:hover { background:#dce8ff; }
   .low { font-size:14px; color:var(--mute); margin-top:6px; }
@@ -357,7 +359,11 @@ function card(w, can) {
     <div class="chg">${chg}${r && r.stale ? ' · <span class="up">חלק מהמחיר מבדיקה קודמת</span>' : ''}</div>
     ${low && h.length > 2 ? `<div class="low">הכי נמוך שראינו: <b>${ils(low.price)}</b> (${new Date(low.t).toLocaleDateString('he-IL')})</div>` : ''}
     ${spark(h)}
-    <div class="legs">${r && r.price != null ? `<div class="opts" style="margin:0 0 4px">${r.rt ? '🎫 מחיר של כרטיס הלוך-חזור אחד' : '🎫 מחיר לפי שני כרטיסים לכיוון אחד (הלוך-חזור לא נטען הפעם)'}</div>` : ''}${leg('🛫 הלוך', (r && r.outDate) || w.out, r && r.out)}${leg('🛬 חזור', (r && r.backDate) || w.back, r && r.back)}
+    <div class="legs">${r && r.price != null ? `<div class="opts" style="margin:0 0 4px">${r.rt ? '🎫 מחיר של כרטיס הלוך-חזור אחד' : '🎫 מחיר לפי שני כרטיסים לכיוון אחד (הלוך-חזור לא נטען הפעם)'}</div>` : ''}
+      ${r && r.price != null && r.combos > 1 ? `<div class="cov ${r.grid === 'OK' && !r.capped ? 'ok' : ''}">${r.grid === 'OK' && !r.capped
+        ? `✅ נבדקו כל ${r.combos} הצירופים בטווח · הכי זול: ${dayName(r.outDate)} ${heD(r.outDate)} ← ${dayName(r.backDate)} ${heD(r.backDate)}`
+        : r.grid === 'OK' ? `✅ נבדקו הצירופים הזולים בטווח (${r.combos} צירופים)` : `ℹ️ נבדקו חלק מהצירופים בטווח (טבלת התאריכים של גוגל לא נטענה הפעם)`}</div>` : ''}
+      ${r && r.gridMin ? `<div class="opts" style="margin:0 0 6px">💡 בלי ההגבלות שלך (חברה, שעות, שבת) יש בטווח גם ב-${ils(r.gridMin)}${pc > 1 ? ' לכולם' : ''}</div>` : ''}${leg('🛫 הלוך', (r && r.outDate) || w.out, r && r.out)}${leg('🛬 חזור', (r && r.backDate) || w.back, r && r.back)}
       <a class="gbtn" href="${gfRound((r && r.outDate) || w.out, (r && r.backDate) || w.back, CFG.origin || 'TLV', w.city, paxOf(w))}" target="_blank">🔎 לראות הלוך-חזור בגוגל טיסות</a></div>
     ${can ? `<div class="tools">
       <button class="ghost" data-edit="${w.id}">✎ עריכה</button>

@@ -160,6 +160,42 @@ async function waitList(p, max) {
   }
   return null;
 }
+// "טבלת תאריכים" של גוגל: מחיר הלוך-חזור לכל צירוף של 3 ימים לפני ואחרי כל תאריך (7×7)
+const MON = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+function gridDate(txt, near) { // "Aug 19" → YYYY-MM-DD, השנה הקרובה לתאריך near
+  const m = /([A-Z][a-z]{2}) (\d{1,2})/.exec(txt); if (!m) return null;
+  const y = +near.slice(0, 4); let best = null;
+  for (const yy of [y - 1, y, y + 1]) { const d = new Date(Date.UTC(yy, MON[m[1]], +m[2], 12)); if (!best || Math.abs(d - new Date(near + 'T12:00:00Z')) < Math.abs(best - new Date(near + 'T12:00:00Z'))) best = d; }
+  return best.toISOString().slice(0, 10);
+}
+async function gridSearch(ctx, o, b, from, to, pax) {
+  const url = `https://www.google.com/travel/flights/search?tfs=${encodeURIComponent(tfsRT(o, b, from, to, pax))}&hl=en&curr=ILS`;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const p = await ctx.newPage();
+    try {
+      await p.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+      await waitList(p, 30);
+      const btn = p.getByRole('button', { name: /Date grid/i });
+      if (!(await btn.count())) throw new Error('אין טבלת תאריכים');
+      await btn.first().click();
+      let cells = [];
+      for (let i = 0; i < 20; i++) {
+        await p.waitForTimeout(1500);
+        cells = await p.evaluate(() => [...document.querySelectorAll('[role=dialog] [role=button][aria-label]')].map((e) => e.getAttribute('aria-label')).filter((a) => /^₪[\d,]+, [A-Z][a-z]{2} \d{1,2} to [A-Z][a-z]{2} \d{1,2}$/.test(a)));
+        if (cells.length >= 10) break;
+      }
+      if (!cells.length) throw new Error('הטבלה לא נטענה');
+      const grid = {};
+      for (const a of cells) {
+        const [, pr, d1, d2] = /^₪([\d,]+), (.+) to (.+)$/.exec(a);
+        grid[`${gridDate(d1, o)}|${gridDate(d2, b)}`] = +pr.replace(/,/g, '');
+      }
+      return { status: 'OK', grid };
+    } catch { } finally { await p.close().catch(() => {}); }
+  }
+  return { status: 'FAIL' };
+}
+
 // okOut/okBack: אילו טיסות מתאימות (חברה, שעות, גמישות, שבת). מחזיר את הצירוף הזול: מחיר כולל לכל הנוסעים
 async function rtSearch(ctx, o, b, from, to, pax, okOut, okBack) {
   const log = [];
@@ -332,23 +368,41 @@ function saveChannelStatus() {
     const pairs = [];
     for (const o of outs) for (const k of backs) if (k.d > o.d && o.f && k.f) pairs.push({ o, k, ow: o.f.price + k.f.price });
     pairs.sort((x, y) => x.ow - y.ow);
-    plan[w.id] = { pairs, allLoaded, rt: [] };
+    const allDates = [];
+    for (const o of outs) for (const k of backs) if (k.d > o.d) allDates.push({ o, k });
+    plan[w.id] = { pairs, allDates, allLoaded, rt: [] };
   }
-  // שלב 2: חיפוש הלוך-חזור (כרטיס אחד) ל-4 הצירופים הזולים של כל טיול
-  const rtJobs = [];
-  for (const w of watches) for (const pr of plan[w.id].pairs.slice(0, +(cfg.rtPairs || 4))) rtJobs.push({ w, pr });
-  if (rtJobs.length) {
-    process.stdout.write(`הלוך-חזור (${rtJobs.length}): `);
+  // שלב 2: הלוך-חזור (כרטיס אחד).
+  //   א. "טבלת תאריכים" — מחיר לכל צירוף תאריכים בטווח (בלי ההגבלות של שבת/חברה/שעות)
+  //   ב. בודקים את הצירופים לפי הסדר מהזול, עם ההגבלות, עד שאי אפשר כבר למצוא זול יותר
+  const needRt = watches.filter((w) => plan[w.id].allDates.length);
+  if (needRt.length) {
+    process.stdout.write(`הלוך-חזור (${needRt.length} טיולים): `);
     const rtBrowser = await chromium.launch(process.env.CHROME_FULL ? { executablePath: process.env.CHROME_FULL, args: ['--headless=new'] } : { channel: 'chromium' });
     const rctx = await rtBrowser.newContext({ locale: 'en-US' });
-    let ri = 0;
-    await Promise.all(Array.from({ length: 3 }, async () => {
-      while (ri < rtJobs.length) {
-        const { w, pr } = rtJobs[ri++];
-        const r = await rtSearch(rctx, pr.o.d, pr.k.d, cfg.origin, w.city, paxOf(w), pr.o.ok, pr.k.ok);
-        process.stdout.write(r.status === 'OK' ? '.' : r.status === 'NONE' ? 'o' : 'x');
-        plan[w.id].rt.push({ pr, r });
-        if (process.env.RT_LOG) console.log('\n' + (r.log || []).join('\n'));
+    let wi = 0;
+    await Promise.all(Array.from({ length: 2 }, async () => {
+      while (wi < needRt.length) {
+        const w = needRt[wi++], P = plan[w.id], px = paxOf(w);
+        let order = P.allDates; // [{o,k}] כל הצירופים בטווח
+        if (order.length > 1) {
+          const g = await gridSearch(rctx, w.out, w.back, cfg.origin, w.city, px);
+          P.grid = g.status;
+          if (g.status === 'OK') {
+            P.gridMin = Math.min(...Object.values(g.grid));
+            order = order.map((x) => ({ ...x, g: g.grid[`${x.o.d}|${x.k.d}`] })).filter((x) => x.g != null).sort((x, y) => x.g - y.g);
+            P.covered = order.length;
+          } else order = P.pairs.map((x) => ({ o: x.o, k: x.k })); // בלי טבלה: לפי המחירים לכיוון אחד
+        } else P.covered = order.length;
+        let best = null, tries = 0;
+        for (const x of order) {
+          if (best && x.g != null && x.g >= best.r.price) break;  // גם המחיר בלי הגבלות לא זול יותר — סיימנו
+          if (++tries > +(cfg.rtTries || 6)) { P.capped = true; break; }
+          const r = await rtSearch(rctx, x.o.d, x.k.d, cfg.origin, w.city, px, x.o.ok, x.k.ok);
+          process.stdout.write(r.status === 'OK' ? '.' : r.status === 'NONE' ? 'o' : 'x');
+          P.rt.push({ pr: x, r });
+          if (r.status === 'OK' && (!best || r.price < best.r.price)) best = { pr: x, r };
+        }
       }
     }));
     await rtBrowser.close();
@@ -365,8 +419,10 @@ function saveChannelStatus() {
     const price = best ? best.price : null;
     const a = best && best.o.f, b = best && best.k.f;
     wOut[w.id] = { price, out: a, back: b, outDate: best && best.o.d, backDate: best && best.k.d, options, rt: isRt,
-                   outUrl: best && best.o.A.url, backUrl: best && best.k.B.url,
-                   stale: !!(best && (best.o.A.stale || best.k.B.stale)), none: allLoaded && price == null };
+                   combos: plan[w.id].allDates.length, covered: plan[w.id].covered || 0, grid: plan[w.id].grid || null, capped: !!plan[w.id].capped,
+                   gridMin: plan[w.id].gridMin != null && price != null && plan[w.id].gridMin < price ? plan[w.id].gridMin : null,
+                   outUrl: best && best.o.A && best.o.A.url, backUrl: best && best.k.B && best.k.B.url,
+                   stale: !!(best && !isRt && ((best.o.A && best.o.A.stale) || (best.k.B && best.k.B.stale))), none: allLoaded && price == null && !plan[w.id].rt.some((x) => x.r.status === 'FAIL') };
     if (price == null) continue;
     const h = (wHist[w.id] = wHist[w.id] || []);
     if (!h.length || h[h.length - 1].price !== price) h.push({ t: now.toISOString(), price });
