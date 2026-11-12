@@ -16,23 +16,30 @@ let watches = rd('watches.json', []); // נטען מחדש מהמסד בתחיל
 const CITY = (c) => cfg.cities[c] || c;
 const AIR = { elal: 'El Al' };
 
-// --- כתובת חיפוש של Google Flights (כיוון אחד, מבוגר אחד, תיירים) ---
-function tfs(date, from, to) {
+// --- נוסעים: מבוגרים (1), ילדים 2–11 (2), תינוקות על הברכיים (4) ---
+const paxOf = (w) => { const p = w.pax || {}; return { adults: Math.max(1, Math.min(9, +p.adults || 1)), children: Math.max(0, Math.min(8, +p.children || 0)), infants: Math.max(0, Math.min(4, +p.infants || 0)) }; };
+const paxBytes = (p) => [...Array(p.adults).fill(1), ...Array(p.children).fill(2), ...Array(p.infants).fill(4)];
+const paxKey = (p) => (p.adults === 1 && !p.children && !p.infants) ? '' : `|a${p.adults}c${p.children}i${p.infants}`;
+const paxText = (p) => [`${p.adults} ${p.adults === 1 ? 'מבוגר' : 'מבוגרים'}`, p.children ? `${p.children} ${p.children === 1 ? 'ילד' : 'ילדים'}` : '', p.infants ? `${p.infants} ${p.infants === 1 ? 'תינוק' : 'תינוקות'}` : ''].filter(Boolean).join(', ');
+const paxCount = (p) => p.adults + p.children + p.infants;
+
+// --- כתובת חיפוש של Google Flights (כיוון אחד, תיירים, ישיר) ---
+function tfs(date, from, to, pax = { adults: 1, children: 0, infants: 0 }) {
   const s = (t) => Buffer.from(t, 'utf8');
   const field = (tag, buf) => Buffer.concat([Buffer.from([tag, buf.length]), buf]);
   // 0x28 0x00 = רק טיסות ישירות
   const inner = Buffer.concat([field(0x12, s(date)), Buffer.from([0x28, 0]), field(0x6a, field(0x12, s(from))), field(0x72, field(0x12, s(to)))]);
-  return Buffer.concat([field(0x1a, inner), Buffer.from([0x42, 1, 1, 0x48, 1, 0x98, 1, 2])]).toString('base64');
+  return Buffer.concat([field(0x1a, inner), field(0x42, Buffer.from(paxBytes(pax))), Buffer.from([0x48, 1, 0x98, 1, 2])]).toString('base64');
 }
 // קישור לאנשים: הלוך-חזור, ישיר, בעברית
-function gfRound(o, b, from, to) {
+function gfRound(o, b, from, to, pax = { adults: 1, children: 0, infants: 0 }) {
   const s = (t) => Buffer.from(t, 'utf8');
   const f = (tag, buf) => Buffer.concat([Buffer.from([tag, buf.length]), buf]);
   const leg = (d, a, c) => f(0x1a, Buffer.concat([f(0x12, s(d)), Buffer.from([0x28, 0]), f(0x6a, f(0x12, s(a))), f(0x72, f(0x12, s(c)))]));
-  const tfs = Buffer.concat([leg(o, from, to), leg(b, to, from), Buffer.from([0x42, 1, 1, 0x48, 1, 0x98, 1, 1])]).toString('base64');
+  const tfs = Buffer.concat([leg(o, from, to), leg(b, to, from), f(0x42, Buffer.from(paxBytes(pax))), Buffer.from([0x48, 1, 0x98, 1, 1])]).toString('base64');
   return `https://www.google.com/travel/flights/search?tfs=${encodeURIComponent(tfs)}&hl=iw&gl=IL&curr=ILS`;
 }
-const gfUrl = (date, from, to) => `https://www.google.com/travel/flights/search?tfs=${encodeURIComponent(tfs(date, from, to))}&hl=en&curr=ILS`;
+const gfUrl = (date, from, to, pax) => `https://www.google.com/travel/flights/search?tfs=${encodeURIComponent(tfs(date, from, to, pax))}&hl=en&curr=ILS`;
 
 function days(a, b) {
   const out = [];
@@ -193,10 +200,12 @@ function saveChannelStatus() {
 
   // אילו חיפושים צריך: שני כיוונים לכל טיול, ופעם ביום גם סקירת כל התאריכים
   const legs = {};
-  const add = (from, to, date) => { legs[`${from}|${to}|${date}`] = { from, to, date, url: gfUrl(date, from, to) }; };
+  // המחיר בגוגל הוא לכל הנוסעים יחד — חיפוש נפרד לכל הרכב נוסעים
+  const add = (from, to, date, pax) => { legs[`${from}|${to}|${date}${pax ? paxKey(pax) : ''}`] = { from, to, date, pax: pax || null, url: gfUrl(date, from, to, pax) }; };
   for (const w of watches) {
-    for (const d of around(w.out, w.outBefore, w.outAfter)) add(cfg.origin, w.city, d);
-    for (const d of around(w.back, w.backBefore, w.backAfter)) add(w.city, cfg.origin, d);
+    const p = paxOf(w);
+    for (const d of around(w.out, w.outBefore, w.outAfter)) add(cfg.origin, w.city, d, p);
+    for (const d of around(w.back, w.backBefore, w.backAfter)) add(w.city, cfg.origin, d, p);
   }
   const ov = cfg.overview;
   const overviewDue = ov && ov.on && (process.env.FULL || !prev.overviewAt || now - new Date(prev.overviewAt) > 20 * 3600e3);
@@ -254,8 +263,8 @@ function saveChannelStatus() {
   for (const w of watches) {
     // הצירוף הכי זול מכל התאריכים האפשריים (לפי הגמישות), בשעות ובחברות שנבחרו
     let best = null, anyMissing = false, allLoaded = true, options = 0;
-    const outs = around(w.out, w.outBefore, w.outAfter).map((d) => { const A = merged[`${cfg.origin}|${w.city}|${d}`]; if (!A || A.status === 'FAIL') allLoaded = false; const m = match(w, w.outHours); return { d, A, f: A && pick(A.res, (x) => m(x) && inFlex(d, w.out, w.outBefore, w.outAfter, x.dep) && (!w.noShabbat || shabbatOk(d, x.dep, x.arr, cfg.origin, w.city))) }; });
-    const backs = around(w.back, w.backBefore, w.backAfter).map((d) => { const B = merged[`${w.city}|${cfg.origin}|${d}`]; if (!B || B.status === 'FAIL') allLoaded = false; const m = match(w, w.backHours); return { d, B, f: B && pick(B.res, (x) => m(x) && inFlex(d, w.back, w.backBefore, w.backAfter, x.dep) && (!w.noShabbat || shabbatOk(d, x.dep, x.arr, w.city, cfg.origin))) }; });
+    const outs = around(w.out, w.outBefore, w.outAfter).map((d) => { const A = merged[`${cfg.origin}|${w.city}|${d}${paxKey(paxOf(w))}`]; if (!A || A.status === 'FAIL') allLoaded = false; const m = match(w, w.outHours); return { d, A, f: A && pick(A.res, (x) => m(x) && inFlex(d, w.out, w.outBefore, w.outAfter, x.dep) && (!w.noShabbat || shabbatOk(d, x.dep, x.arr, cfg.origin, w.city))) }; });
+    const backs = around(w.back, w.backBefore, w.backAfter).map((d) => { const B = merged[`${w.city}|${cfg.origin}|${d}${paxKey(paxOf(w))}`]; if (!B || B.status === 'FAIL') allLoaded = false; const m = match(w, w.backHours); return { d, B, f: B && pick(B.res, (x) => m(x) && inFlex(d, w.back, w.backBefore, w.backAfter, x.dep) && (!w.noShabbat || shabbatOk(d, x.dep, x.arr, w.city, cfg.origin))) }; });
     for (const o of outs) for (const k of backs) {
       if (k.d <= o.d || !o.f || !k.f) continue;
       options++;
@@ -295,7 +304,8 @@ function saveChannelStatus() {
       const p = r && r.price != null ? ils(r.price) : 'אין מחיר כרגע';
       const t = w.target ? (r && r.price != null && r.price <= w.target ? ` ✅ מתחת ליעד (${ils(w.target)})` : ` · יעד ${ils(w.target)}`) : '';
       const dd = r && r.outDate ? `${he(r.outDate)} – ${he(r.backDate)}` : `${he(w.out)} – ${he(w.back)}`;
-      L.push(`${CITY(w.city)} ${dd}: ${p}${t}`);
+      const pp = paxOf(w), pn = paxCount(pp);
+      L.push(`${CITY(w.city)} ${dd}${pn > 1 ? ` (${pn} נוסעים)` : ''}: ${p}${t}`);
     }
     L.push('', 'המערכת בודקת כל חצי שעה ותשלח הודעה על כל ירידה.');
     if (process.env.PAGE_URL) L.push(process.env.PAGE_URL);
@@ -324,12 +334,13 @@ const ils = (n) => '₪' + n.toLocaleString('en-US');
 function message(alerts) {
   const L = [];
   for (const { w, price, a, b, od, bd, why, from } of alerts) {
-    L.push(`🔔 ${CITY(w.city)} — ${airLabel(w)} (ישיר)`);
+    L.push(`🔔 ${CITY(w.city)} — ${airLabel(w)} (ישיר) · ${paxText(paxOf(w))}`);
     L.push(from != null ? `המחיר ירד מ-${ils(from)} ל-${ils(price)}` : `המחיר עכשיו: ${ils(price)}`);
     if (why === 'target') L.push(`✅ מתחת למחיר שקבעת (${ils(w.target)})!`);
     L.push(`🛫 הלוך ${he(od)}, ${a.dep} (${a.air}) — ${ils(a.price)}`);
     L.push(`🛬 חזור ${he(bd)}, ${b.dep} (${b.air}) — ${ils(b.price)}`);
-    L.push(`🔎 בגוגל טיסות: ${gfRound(od, bd, cfg.origin, w.city)}`);
+    if (paxCount(paxOf(w)) > 1) L.push(`💰 לכל ${paxCount(paxOf(w))} הנוסעים · בערך ${ils(Math.round(price / paxCount(paxOf(w))))} לנוסע`);
+    L.push(`🔎 בגוגל טיסות: ${gfRound(od, bd, cfg.origin, w.city, paxOf(w))}`);
     L.push('');
   }
   L.push('המחיר מ-Google Flights. לפני הזמנה — לבדוק באתר של החברה.');

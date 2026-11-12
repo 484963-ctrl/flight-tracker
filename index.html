@@ -261,7 +261,9 @@ function tripForm(p, w = {}) {
   return `<div class="tf">
     <div class="row">
       ${p === 'f' ? `<label>לאן<select id="${p}City">${Object.entries(CFG.cities || {}).map(([k, v]) => `<option value="${k}" ${w.city === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>` : ''}
-      <label>להתריע מתחת ל-₪<input type="number" id="${p}Target" min="0" step="10" placeholder="למשל 1800" value="${w.target || ''}"></label>
+      ${(() => { const px = paxOf(w), sel = (id, v, from, to, lbl) => `<label>${lbl}<select id="${p}${id}">${Array.from({ length: to - from + 1 }, (_, i) => i + from).map((n) => `<option value="${n}" ${n === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>`;
+        return sel('PA', px.adults, 1, 9, '🎫 מבוגרים (12+)') + sel('PC', px.children, 0, 8, 'ילדים (2–11)') + sel('PI', px.infants, 0, 4, 'תינוקות (עד 2)'); })()}
+      <label>להתריע מתחת ל-₪ (לכל הנוסעים)<input type="number" id="${p}Target" min="0" step="10" placeholder="למשל 1800" value="${w.target || ''}"></label>
       <label class="chip" style="align-self:flex-end" title="לא טסים ולא נוחתים מ-3 שעות לפני השקיעה של ערב שבת/חג ועד 3 שעות אחרי צאת השבת (50 דקות אחרי השקיעה)"><input type="checkbox" id="${p}NoSh" ${w.noShabbat === false ? '' : 'checked'}> 🕯️ בלי טיסות בשבת וחג</label>
     </div>
     <fieldset><legend>🛫 הלוך</legend><div class="row">
@@ -278,11 +280,13 @@ function readTrip(p) {
   const hrs = (id) => { const f = $(`#${id}F`).value, t = $(`#${id}T`).value; return f === '' && t === '' ? null : [f === '' ? 0 : +f, t === '' ? 24 : +t]; };
   return { out: $(`#${p}Out`).value, back: $(`#${p}Back`).value, target: +$(`#${p}Target`).value || null,
     flexOutBefore: +$(`#${p}FlexOB`).value, flexOutAfter: +$(`#${p}FlexOA`).value, flexBackBefore: +$(`#${p}FlexBB`).value, flexBackAfter: +$(`#${p}FlexBA`).value, outHours: hrs(p + 'HO'), backHours: hrs(p + 'HB'),
-    airlines: [...document.querySelectorAll(`[data-air="${p}"]:checked`)].map((x) => x.value), noShabbat: $(`#${p}NoSh`).checked };
+    airlines: [...document.querySelectorAll(`[data-air="${p}"]:checked`)].map((x) => x.value), noShabbat: $(`#${p}NoSh`).checked,
+    pax: { adults: +$(`#${p}PA`).value, children: +$(`#${p}PC`).value, infants: +$(`#${p}PI`).value } };
 }
 function checkTrip(t) {
   if (!t.out || !t.back) return 'צריך לבחור תאריך הלוך ותאריך חזור.';
   if (t.back <= t.out) return 'תאריך החזור צריך להיות אחרי ההלוך.';
+  if (t.pax && t.pax.infants > t.pax.adults) return 'לכל תינוק צריך מבוגר אחד לפחות.';
   if (nights(t.out, t.back) > 60) return `בין ההלוך לחזור יש ${nights(t.out, t.back)} לילות — כדאי לבדוק את תאריך החזור (אולי השנה לא נכונה?).`;
   if (nights(new Date().toISOString().slice(0, 10), t.back) > 330) return 'אפשר לבדוק מחירים רק עד כ-11 חודשים קדימה — חברות התעופה עוד לא פתחו טיסות לתאריך הזה.';
   for (const h of [t.outHours, t.backHours]) if (h && h[1] <= h[0]) return 'בשעות ההמראה: שעת הסיום צריכה להיות אחרי שעת ההתחלה.';
@@ -300,11 +304,15 @@ function optsText(w) {
 }
 
 // קישור לגוגל טיסות: הלוך-חזור, טיסות ישירות, בעברית
-function gfRound(o, b, from, to) {
+const paxOf = (w) => { const p = w.pax || {}; return { adults: Math.max(1, +p.adults || 1), children: +p.children || 0, infants: +p.infants || 0 }; };
+const paxCount = (p) => p.adults + p.children + p.infants;
+const paxText = (p) => [`${p.adults} ${p.adults === 1 ? 'מבוגר' : 'מבוגרים'}`, p.children ? `${p.children} ${p.children === 1 ? 'ילד' : 'ילדים'}` : '', p.infants ? `${p.infants} ${p.infants === 1 ? 'תינוק' : 'תינוקות'}` : ''].filter(Boolean).join(', ');
+function gfRound(o, b, from, to, pax = { adults: 1, children: 0, infants: 0 }) {
   const enc = (t) => [...new TextEncoder().encode(t)];
   const f = (tag, x) => [tag, x.length, ...x];
   const leg = (d, a, c) => f(0x1a, [...f(0x12, enc(d)), 0x28, 0, ...f(0x6a, f(0x12, enc(a))), ...f(0x72, f(0x12, enc(c)))]);
-  const bytes = [...leg(o, from, to), ...leg(b, to, from), 0x42, 1, 1, 0x48, 1, 0x98, 1, 1];
+  const pb = [...Array(pax.adults).fill(1), ...Array(pax.children).fill(2), ...Array(pax.infants).fill(4)];
+  const bytes = [...leg(o, from, to), ...leg(b, to, from), ...f(0x42, pb), 0x48, 1, 0x98, 1, 1];
   return `https://www.google.com/travel/flights/search?tfs=${encodeURIComponent(btoa(String.fromCharCode(...bytes)))}&hl=iw&gl=IL&curr=ILS`;
 }
 
@@ -316,6 +324,7 @@ function card(w, can) {
   const prevP = h.length > 1 ? h[h.length - 2].price : null;
   const low = h.length ? h.reduce((a, b) => b.price < a.price ? b : a) : null;
   const air = airText(w) + ' · טיסה ישירה';
+  const px = paxOf(w), pc = paxCount(px);
   let chg = '';
   if (price != null && prevP != null && Math.abs(price - prevP) >= 5) chg = price < prevP ? `<span class="dn">▼ ירד ב-${ils(prevP - price)}</span> מהבדיקה הקודמת` : price > prevP ? `<span class="up">▲ עלה ב-${ils(price - prevP)}</span> מהבדיקה הקודמת` : 'ללא שינוי';
   else if (price != null && h.length) chg = 'ללא שינוי';
@@ -323,7 +332,7 @@ function card(w, can) {
     : hit ? `<span class="badge hit">✅ מתחת ליעד (${ils(w.target)})</span>`
     : price != null ? `<span class="badge wait">יעד ${ils(w.target)}${usdTag(w.target)} · חסר עוד ${ils(price - w.target)}</span>`
     : `<span class="badge wait">יעד ${ils(w.target)}</span>`;
-  const status = price != null ? `<div class="price">${ils(price)}${usdTag(price)}</div>`
+  const status = price != null ? `<div class="price">${ils(price)}${usdTag(price)}</div>${pc > 1 ? `<div class="opts" style="margin-top:0">לכל ${pc} הנוסעים · בערך ${ils(Math.round(price / pc))} לנוסע</div>` : ''}`
     : r && r.none ? '<div class="price" style="font-size:20px;color:var(--red)">אין טיסה ישירה מתאימה בתאריכים האלה</div>'
     : `<div class="price" style="font-size:20px;color:var(--mute)">⏳ ייבדק בבדיקה הבאה (עד חצי שעה)</div>`;
   const leg = (lbl, d, x) => `<div>${lbl} ${dayName(d)} ${heD(d)}: ${x ? `<b>${ils(x.price)}</b>${usdTag(x.price)} · ${ltr(x.dep)} · ${x.air}` : '—'}</div>`;
@@ -331,7 +340,7 @@ function card(w, can) {
   return `<div class="card ${hit ? 'hit' : ''}">
     <div class="photo" style="background-image:url(img/${img}.jpg)">
       ${hit ? '<div class="ribbon">✅ מתחת ליעד!</div>' : ''}
-      <div class="cap"><div class="city">${CFG.cities && CFG.cities[w.city] || w.city}</div><div class="air">${air}</div></div>
+      <div class="cap"><div class="city">${CFG.cities && CFG.cities[w.city] || w.city}</div><div class="air">${air} · 🎫 ${paxText(px)}</div></div>
     </div>
     <div class="cb">
     ${(() => { const o = (r && r.outDate) || w.out, b = (r && r.backDate) || w.back, flex = [...baOf(w, 'out'), ...baOf(w, 'back')].some(Boolean);
@@ -343,7 +352,7 @@ function card(w, can) {
     ${low && h.length > 2 ? `<div class="low">הכי נמוך שראינו: <b>${ils(low.price)}</b> (${new Date(low.t).toLocaleDateString('he-IL')})</div>` : ''}
     ${spark(h)}
     <div class="legs">${leg('🛫 הלוך', (r && r.outDate) || w.out, r && r.out)}${leg('🛬 חזור', (r && r.backDate) || w.back, r && r.back)}
-      <a class="gbtn" href="${gfRound((r && r.outDate) || w.out, (r && r.backDate) || w.back, CFG.origin || 'TLV', w.city)}" target="_blank">🔎 לראות הלוך-חזור בגוגל טיסות</a></div>
+      <a class="gbtn" href="${gfRound((r && r.outDate) || w.out, (r && r.backDate) || w.back, CFG.origin || 'TLV', w.city, paxOf(w))}" target="_blank">🔎 לראות הלוך-חזור בגוגל טיסות</a></div>
     ${can ? `<div class="tools">
       <button class="ghost" data-edit="${w.id}">✎ עריכה</button>
       <button class="ghost" data-del="${w.id}">🗑 מחיקה</button></div>` : ''}
@@ -388,7 +397,7 @@ function bindCards() {
       const list = W.map((w) => {
         if (w.id !== b.dataset.esave) return w;
         const same = (k) => JSON.stringify(k === 'airlines' ? airsOf(w) : w[k] ?? null) === JSON.stringify(t[k] ?? null);
-        const moved = !['out', 'back', 'outHours', 'backHours', 'airlines'].every(same) || (w.noShabbat !== false) !== t.noShabbat || JSON.stringify([...baOf(w, 'out'), ...baOf(w, 'back')]) !== JSON.stringify([t.flexOutBefore, t.flexOutAfter, t.flexBackBefore, t.flexBackAfter]);
+        const moved = JSON.stringify(paxOf(w)) !== JSON.stringify(t.pax) || !['out', 'back', 'outHours', 'backHours', 'airlines'].every(same) || (w.noShabbat !== false) !== t.noShabbat || JSON.stringify([...baOf(w, 'out'), ...baOf(w, 'back')]) !== JSON.stringify([t.flexOutBefore, t.flexOutAfter, t.flexBackBefore, t.flexBackAfter]);
         // טיסות אחרות = טיול חדש: מתחילים מעקב (וגרף) מחדש
         const { airline, flexOut, flexBack, flexOutDir, flexBackDir, ...rest } = w;
         return { ...rest, ...t, id: moved ? 'w' + Date.now().toString(36) : w.id };
@@ -481,7 +490,7 @@ $('#fAdd').onclick = async () => {
   const err = checkTrip(w);
   if (err) return m.textContent = err;
   if (w.out < new Date().toISOString().slice(0, 10)) return m.textContent = 'תאריך ההלוך כבר עבר.';
-  if (W.find((x) => x.city === w.city && x.out === w.out && x.back === w.back && JSON.stringify(airsOf(x)) === JSON.stringify(w.airlines) && JSON.stringify([...baOf(x, 'out'), ...baOf(x, 'back')]) === JSON.stringify([w.flexOutBefore, w.flexOutAfter, w.flexBackBefore, w.flexBackAfter]))) return m.textContent = 'הטיול הזה כבר במעקב.';
+  if (W.find((x) => x.city === w.city && x.out === w.out && x.back === w.back && JSON.stringify(airsOf(x)) === JSON.stringify(w.airlines) && JSON.stringify(paxOf(x)) === JSON.stringify(w.pax) && JSON.stringify([...baOf(x, 'out'), ...baOf(x, 'back')]) === JSON.stringify([w.flexOutBefore, w.flexOutAfter, w.flexBackBefore, w.flexBackAfter]))) return m.textContent = 'הטיול הזה כבר במעקב.';
   $('#fAdd').disabled = true;
   m.className = 'msg'; m.textContent = 'שומר…';
   try {
