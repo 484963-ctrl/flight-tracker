@@ -273,6 +273,7 @@ async function loadWatches() {
 
 // שער הדולר להצגת מחיר בדולרים באתר: קודם שער השוק העדכני (מתעדכן כל דקה בשעות המסחר),
 // ואם הוא לא זמין — השער היציג של בנק ישראל, ואחריו הבנק המרכזי האירופי
+let FX = null; // שער הדולר — לפני שבונים הודעות
 async function getFx(prevFx) {
   const tries = [
     async () => {
@@ -484,6 +485,7 @@ function saveChannelStatus() {
     subOut[w.id] = wOut[w.id];
     if (w.id !== w.parent) delete wOut[w.id];
   }
+  FX = await getFx(prev.fx);
   // לכל טיול: היעד הזול מבין היעדים שבחרת
   for (const w of watches) {
     const mine = subs.filter((x) => x.parent === w.id);
@@ -539,16 +541,18 @@ function saveChannelStatus() {
       if (!r || r.price == null) { L.push(`✈️ ${placeOf(w)} · אין מחיר כרגע`); continue; }
       L.push(`✈️ ${placeOf(w)} · דרך ${CITY(r.city || w.city)} · ${airHe(r.out) || 'טיסה ישירה'}`);
       L.push(`🗓️ ${heFull(r.outDate)} ← ${heFull(r.backDate)} · ${nights(r.outDate, r.backDate)} לילות`);
-      L.push(`💰 *${ils(pn > 1 ? Math.round(r.price / pn) : r.price)}${pn > 1 ? ' לנוסע' : ''}*${pn > 1 ? ` · ${ils(r.price)} לכולם` : ''}${w.target ? (r.price <= w.target ? ` · ✅ מתחת ליעד (${ils(w.target)})` : ` · יעד ${ils(w.target)}`) : ''}`);
+      const per = (n) => Math.round(n / pn);
+      L.push(`💰 *${both(per(r.price))}${pn > 1 ? ' לנוסע' : ''}*${pn > 1 ? ` · ${both(r.price)} לכולם` : ''}`);
+      if (w.target) L.push(r.price <= w.target ? `✅ מתחת ליעד (${ils(per(w.target))}${pn > 1 ? ' לנוסע' : ''})` : `🎯 יעד ${ils(per(w.target))}${pn > 1 ? ' לנוסע' : ''} · חסר עוד ${ils(per(r.price - w.target))}`);
       const h = wHist[w.id] || [], y = h.filter((x) => now - new Date(x.t) > 20 * 3600e3).pop();
-      if (y && y.price !== r.price) L.push(y.price > r.price ? `📉 ירד ב-${ils(y.price - r.price)} מאתמול` : `📈 עלה ב-${ils(r.price - y.price)} מאתמול`);
+      if (y && y.price !== r.price) L.push(y.price > r.price ? `📉 ירד ב-${ils(per(y.price - r.price))}${pn > 1 ? ' לנוסע' : ''} מאתמול` : `📈 עלה ב-${ils(per(r.price - y.price))}${pn > 1 ? ' לנוסע' : ''} מאתמול`);
     }
     L.push('', 'המערכת בודקת כל חצי שעה ותשלח הודעה על כל ירידה.' + footer());
     notes.push(L.join('\n'));
     sys.daily = ilDate;
   }
 
-  const fx = await getFx(prev.fx);
+  const fx = FX;
   const noDirect = { ...(prev.noDirect || {}) };
   for (const w of subs) { const P = plan[w.id]; if (!P || !P.allLoaded) continue;
     if (P.noDirect) { const o = typeof noDirect[w.city] === 'object' ? noDirect[w.city] : { n: 0 }; noDirect[w.city] = { n: (o.n || 0) + 1, t: now.toISOString() }; } else if (P.anyDirect) delete noDirect[w.city]; }
@@ -574,6 +578,8 @@ function saveChannelStatus() {
 const DAY = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'שבת'];
 const he = (d) => { const [, m, day] = d.split('-'); const w = new Date(d + 'T12:00:00Z').getUTCDay(); return `${w === 6 ? 'שבת' : 'יום ' + DAY[w]} ${+day}.${+m}`; };
 const ils = (n) => '₪' + n.toLocaleString('en-US');
+const usd = (n) => FX && FX.rate ? '$' + Math.round(n / FX.rate).toLocaleString('en-US') : '';
+const both = (n) => usd(n) ? `${ils(n)} (${usd(n)})` : ils(n); // ₪1,883 ($508)
 // גימטריה ליום בחודש (1–30)
 const gem = (n) => { const o = ['', 'א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ז', 'ח', 'ט'], t = ['', 'י', 'כ', 'ל'];
   let x = n === 15 ? 'טו' : n === 16 ? 'טז' : t[Math.floor(n / 10)] + o[n % 10];
@@ -598,9 +604,10 @@ function tripBlock(w, r, o = {}) {
   const L = [], pp = paxOf(w), pn = paxCount(pp), a = r.out, b = r.back, od = r.outDate, bd = r.backDate;
   if (w.title && !o.noTitle) L.push(`🧳 ${w.title}`);
   L.push(`✈️ הטיסה שלכם ל${placeOf(w)}, ${monthOf(od)}`);
-  if (o.from != null) L.push(`🔔 המחיר ירד מ-${ils(o.from)} ל-*${ils(r.price)}* (פחות ${ils(o.from - r.price)}, ${Math.round((o.from - r.price) / o.from * 100)}%)`);
-  else if (o.alert) L.push(`🔔 המחיר עכשיו: *${ils(r.price)}*`);
-  if (o.why === 'target') L.push(`✅ מתחת למחיר שקבעת (${ils(w.target)})`);
+  const per = (n) => Math.round(n / pn), pl = pn > 1 ? ' לנוסע' : '';
+  if (o.from != null) L.push(`🔔 המחיר${pl} ירד מ-${ils(per(o.from))} ל-*${both(per(r.price))}* (פחות ${ils(per(o.from - r.price))}${pl}, ${Math.round((o.from - r.price) / o.from * 100)}%)`);
+  else if (o.alert) L.push(`🔔 המחיר${pl} עכשיו: *${both(per(r.price))}*`);
+  if (o.why === 'target') L.push(`✅ מתחת למחיר שקבעת (${ils(per(w.target))}${pl})`);
   if (o.lowest) L.push('🏆 המחיר הכי נמוך שראינו');
   L.push('');
   L.push(`📍 דרך ${CITY(r.city || w.city)} · ${airHe(a) || 'טיסה'} · טיסה ישירה`);
@@ -610,13 +617,13 @@ function tripBlock(w, r, o = {}) {
   L.push(`🌙 ${nights(od, bd)} לילות`);
   L.push('');
   const how = r.rt ? 'הלוך-חזור בכרטיס אחד' : 'שני כרטיסים לכיוון אחד';
-  L.push(pn > 1 ? `💰 *${ils(Math.round(r.price / pn))} לנוסע* · ${ils(r.price)} ל-${paxText(pp)} · ${how}` : `💰 *${ils(r.price)}* · ${how}`);
+  L.push(pn > 1 ? `💰 *${both(per(r.price))} לנוסע*\n👥 ביחד ל-${paxText(pp)}: ${both(r.price)} · ${how}` : `💰 *${both(r.price)}* · ${how}`);
   // שאר שדות התעופה — שורה קצרה לכל אחד
   const cs = (r.cities || []).filter((c) => c.city !== (r.city || w.city)).sort((x, y) => (x.price ?? 1e9) - (y.price ?? 1e9));
   if (cs.length) {
     L.push('', `🗺️ שאר השדות${pn > 1 ? ' (לנוסע)' : ''}:`);
     for (const c of cs) L.push(`▫️ ${CITY(c.city)} — ${c.price != null
-      ? `${ils(pn > 1 ? Math.round(c.price / pn) : c.price)} · ${+c.outDate.slice(8)}.${+c.outDate.slice(5, 7)}–${+c.backDate.slice(8)}.${+c.backDate.slice(5, 7)}${c.price - r.price > 0 ? ` (יקר ב-${ils(pn > 1 ? Math.round((c.price - r.price) / pn) : c.price - r.price)})` : ''} · [🔎](${gfRound(c.outDate, c.backDate, cfg.origin, c.city, pp)})`
+      ? `${both(pn > 1 ? Math.round(c.price / pn) : c.price)} · ${+c.outDate.slice(8)}.${+c.outDate.slice(5, 7)}–${+c.backDate.slice(8)}.${+c.backDate.slice(5, 7)}${c.price - r.price > 0 ? ` (יקר ב-${ils(pn > 1 ? Math.round((c.price - r.price) / pn) : c.price - r.price)})` : ''} · [🔎](${gfRound(c.outDate, c.backDate, cfg.origin, c.city, pp)})`
       : c.none ? (c.why === 'nodirect' ? 'אין טיסה ישירה' : c.why === 'retry' ? 'לא נמצא הפעם, ייבדק שוב' : 'אין טיסה לפי ההגדרות') : 'עוד נבדק'}`);
   }
   return L.join('\n');
