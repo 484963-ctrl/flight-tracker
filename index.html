@@ -579,7 +579,7 @@ function card(w, can) {
     ${low && h.length > 2 ? `<div class="low">הכי נמוך שראינו: <b>${ils(low.price)}</b> (${new Date(low.t).toLocaleDateString('he-IL')})</div>` : ''}
     ${spark(h)}
     <div class="legs">${r && r.price != null ? `<div class="opts" style="margin:0 0 4px">${r.rt ? '🎫 מחיר של כרטיס הלוך-חזור אחד' : '🎫 מחיר לפי שני כרטיסים לכיוון אחד (הלוך-חזור לא נטען הפעם)'}</div>` : ''}
-      ${r && r.price != null && r.combos > 1 ? `<div class="cov ${r.grid === 'OK' && !r.capped ? 'ok' : ''}">${r.grid === 'OK' && !r.capped
+      ${r && r.price != null && r.combos > 1 ? `<div class="cov ${(r.grid === 'OK' || r.grid === 'ALL') && !r.capped ? 'ok' : ''}">${(r.grid === 'OK' || r.grid === 'ALL') && !r.capped
         ? `✅ נבדקו כל ${r.combos} הצירופים בטווח · הכי זול: ${dayName(r.outDate)} ${heD(r.outDate)} ← ${dayName(r.backDate)} ${heD(r.backDate)}`
         : r.grid === 'OK' ? `✅ נבדקו הצירופים הזולים בטווח (${r.combos} צירופים)` : `ℹ️ נבדקו חלק מהצירופים בטווח (טבלת התאריכים של גוגל לא נטענה הפעם)`}</div>` : ''}
       ${r && r.gridMin ? `<div class="opts" style="margin:0 0 6px">💡 בלי ההגבלות שלך (חברה, שעות, שבת) יש בטווח גם ב-${ils(r.gridMin)}${pc > 1 ? ' לכולם' : ''}</div>` : ''}${leg('🛫 הלוך', (r && r.outDate) || w.out, r && r.out)}${leg('🛬 חזור', (r && r.backDate) || w.back, r && r.back)}

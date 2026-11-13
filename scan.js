@@ -416,31 +416,50 @@ function saveChannelStatus() {
     process.stdout.write(`הלוך-חזור (${needRt.length} טיולים): `);
     const rtBrowser = await chromium.launch(process.env.CHROME_FULL ? { executablePath: process.env.CHROME_FULL, args: ['--headless=new'] } : { channel: 'chromium' });
     const rctx = await rtBrowser.newContext({ locale: 'en-US' });
-    let wi = 0;
-    await Promise.all(Array.from({ length: +(process.env.RT_PARALLEL || 4) }, async () => {
-      while (wi < needRt.length) {
-        const w = needRt[wi++], P = plan[w.id], px = paxOf(w);
-        let order = P.allDates; // [{o,k}] כל הצירופים בטווח
-        if (order.length > 1) {
-          const g = await gridSearch(rctx, w.out, w.back, cfg.origin, w.city, px);
-          P.grid = g.status;
-          if (g.status === 'OK') {
-            P.gridMin = Math.min(...Object.values(g.grid));
-            order = order.map((x) => ({ ...x, g: g.grid[`${x.o.d}|${x.k.d}`] })).filter((x) => x.g != null).sort((x, y) => x.g - y.g);
-            P.covered = order.length;
-          } else order = P.pairs.map((x) => ({ o: x.o, k: x.k })); // בלי טבלה: לפי המחירים לכיוון אחד
-        } else P.covered = order.length;
-        let best = null, tries = 0;
-        for (const x of order) {
-          if (best && x.g != null && x.g >= best.r.price) break;  // גם המחיר בלי הגבלות לא זול יותר — סיימנו
-          if (++tries > +(cfg.rtTries || 4)) { P.capped = true; break; }
-          const r = await rtSearch(rctx, x.o.d, x.k.d, cfg.origin, w.city, px, x.o.ok, x.k.ok);
-          process.stdout.write(r.status === 'OK' ? '.' : r.status === 'NONE' ? 'o' : 'x');
-          P.rt.push({ pr: x, r });
-          if (r.status === 'OK' && (!best || r.price < best.r.price)) best = { pr: x, r };
-        }
+    // בדיקה של יעד אחד: טבלת תאריכים, ואז אימות הצירופים מהזול ליקר עם ההגבלות
+    async function doSub(w, ctx, fullIfNoGrid) {
+      const P = plan[w.id], px = paxOf(w);
+      P.rt = []; P.capped = false;
+      let order = P.allDates; // [{o,k}] כל הצירופים בטווח
+      let cap = +(cfg.rtTries || 4);
+      if (order.length > 1) {
+        const g = await gridSearch(ctx, w.out, w.back, cfg.origin, w.city, px);
+        P.grid = g.status;
+        if (g.status === 'OK') {
+          P.gridMin = Math.min(...Object.values(g.grid));
+          // רק צירופים שיש בהם טיסה שמתאימה להגדרות בשני הכיוונים (לפי החיפוש לכיוון אחד) — השאר כבר "נבדקו" ונפסלו
+          const okPair = new Set(P.pairs.map((x) => `${x.o.d}|${x.k.d}`));
+          P.covered = order.length;
+          order = order.map((x) => ({ ...x, g: g.grid[`${x.o.d}|${x.k.d}`] })).filter((x) => x.g != null && okPair.has(`${x.o.d}|${x.k.d}`)).sort((x, y) => x.g - y.g);
+        } else if (fullIfNoGrid && order.length <= 12) {
+          // הטבלה לא נטענה גם בניסיון השני — בודקים את כל הצירופים אחד אחד (איטי יותר, אבל מלא)
+          const ow = Object.fromEntries(P.pairs.map((x) => [`${x.o.d}|${x.k.d}`, x.ow]));
+          order = order.filter((x) => ow[`${x.o.d}|${x.k.d}`] != null).sort((x, y) => ow[`${x.o.d}|${x.k.d}`] - ow[`${y.o.d}|${y.k.d}`]);
+          cap = order.length; P.grid = 'ALL'; P.covered = P.allDates.length;
+        } else order = P.pairs.map((x) => ({ o: x.o, k: x.k })); // בלי טבלה: לפי המחירים לכיוון אחד
+      } else P.covered = order.length;
+      let best = null, tries = 0;
+      for (const x of order) {
+        if (best && x.g != null && x.g >= best.r.price) break;  // גם המחיר בלי הגבלות לא זול יותר — סיימנו
+        if (++tries > cap) { P.capped = true; break; }
+        const r = await rtSearch(ctx, x.o.d, x.k.d, cfg.origin, w.city, px, x.o.ok, x.k.ok);
+        process.stdout.write(r.status === 'OK' ? '.' : r.status === 'NONE' ? 'o' : 'x');
+        P.rt.push({ pr: x, r });
+        if (r.status === 'OK' && (!best || r.price < best.r.price)) best = { pr: x, r };
       }
+    }
+    let wi = 0;
+    await Promise.all(Array.from({ length: +(process.env.RT_PARALLEL || 3) }, async () => {
+      while (wi < needRt.length) await doSub(needRt[wi++], rctx, false);
     }));
+    // סבב שני: יעדים שטבלת התאריכים שלהם לא נטענה — אחד אחד, בדפדפן חדש; ואם שוב לא — בודקים את כל הצירופים
+    const again = needRt.filter((w) => plan[w.id].grid === 'FAIL');
+    if (again.length) {
+      process.stdout.write(` | שוב (${again.length}): `);
+      for (const k of Object.keys(gridMemo)) delete gridMemo[k];
+      const rctx2 = await rtBrowser.newContext({ locale: 'en-US' });
+      for (const w of again) await doSub(w, rctx2, true);
+    }
     await rtBrowser.close();
     console.log();
   }
