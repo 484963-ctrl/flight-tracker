@@ -53,8 +53,9 @@ async function whatsapp(text) {
     const res = [];
     for (const [i, n] of to.entries()) {
       if (i) await new Promise((r) => setTimeout(r, 6000)); // לפחות 5 שניות בין הודעות — המלצת TextMeBot כדי שוואטסאפ לא יחסום
-      const u = `https://api.textmebot.com/send.php?recipient=${encodeURIComponent(n)}&apikey=${encodeURIComponent(E.TEXTMEBOT_APIKEY)}&text=${encodeURIComponent(text)}`;
-      const r = await fetch(u);
+      // POST — הודעה ארוכה בכתובת (GET) נכשלת ב-414
+      const r = await fetch('https://api.textmebot.com/send.php', { method: 'POST',
+        body: new URLSearchParams({ recipient: n, apikey: E.TEXTMEBOT_APIKEY, text }) });
       const body = await r.text();
       res.push(r.ok && !/error|invalid/i.test(body) ? 'נשלח' : 'שגיאה ' + r.status + ' ' + body.slice(0, 80));
     }
