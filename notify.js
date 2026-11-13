@@ -4,6 +4,12 @@ const fs = require('fs');
 const path = require('path');
 const E = process.env;
 
+// ההודעה כתובה עם *מודגש* ו-[טקסט](קישור); כל ערוץ מקבל את הצורה שלו
+const LINK = /\[([^\]]+)\]\((https?:[^)\s]+)\)/g;
+const escH = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const asHtml = (t) => escH(t).replace(LINK, (_, l, u) => `<a href="${u.replace(/"/g, '&quot;')}">${l}</a>`).replace(/\*([^*\n]+)\*/g, '<b>$1</b>');
+const asPlain = (t, bold) => t.replace(LINK, (_, l, u) => `${l}:\n${u}`).replace(/\*([^*\n]+)\*/g, bold ? '*$1*' : '$1');
+
 async function telegram(text) {
   if (!E.TELEGRAM_TOKEN) return 'טלגרם: לא הוגדר';
   const api = `https://api.telegram.org/bot${E.TELEGRAM_TOKEN}`;
@@ -20,12 +26,13 @@ async function telegram(text) {
   }
   const r = await fetch(`${api}/sendMessage`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ chat_id: chat, text, disable_web_page_preview: true }),
+    body: JSON.stringify({ chat_id: chat, text: asHtml(text), parse_mode: 'HTML', disable_web_page_preview: true }),
   });
   return 'טלגרם: ' + (r.ok ? 'נשלח' : 'שגיאה ' + r.status);
 }
 
 async function whatsapp(text) {
+  text = asPlain(text, true);
   // TextMeBot: נשלח מהוואטסאפ שחובר אצלם, לכל המספרים ב-WHATSAPP_TO (מופרדים בפסיק)
   if (E.TEXTMEBOT_APIKEY) {
     const to = (E.WHATSAPP_TO || E.WHATSAPP_PHONE || '').split(',').map((x) => x.trim()).filter(Boolean);
@@ -46,11 +53,12 @@ async function whatsapp(text) {
   return 'וואטסאפ: ' + (r.ok ? 'נשלח' : 'שגיאה ' + r.status);
 }
 
-async function email(text) {
+async function email(md) {
+  const text = asPlain(md, false);
   if (!E.MAIL_USER || !E.MAIL_PASS) return 'מייל: לא הוגדר';
   const nodemailer = require('nodemailer');
   const t = nodemailer.createTransport({ host: 'smtp.gmail.com', port: 465, secure: true, auth: { user: E.MAIL_USER, pass: E.MAIL_PASS } });
-  const html = `<div dir="rtl" style="font-family:Arial;font-size:16px;white-space:pre-line">${text.replace(/</g, '&lt;')}</div>`;
+  const html = `<div dir="rtl" style="font-family:Arial;font-size:16px;white-space:pre-line">${asHtml(md)}</div>`;
   await t.sendMail({ from: E.MAIL_USER, to: E.MAIL_TO || E.MAIL_USER, subject: text.split('\n')[0], text, html });
   return 'מייל: נשלח';
 }

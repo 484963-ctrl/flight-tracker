@@ -501,17 +501,10 @@ function saveChannelStatus() {
     if (!st0.firstDone && st0.last != null) st0.firstDone = 'before'; // טיול שכבר נבדק בעבר — בלי הודעה
     if (!st0.firstDone && (price != null || wOut[w.id].none)) {
       st0.firstDone = now.toISOString();
-      const pn = paxCount(paxOf(w));
-      const L = [`✅ הבדיקה הראשונה הסתיימה: ${w.title ? `🧳 ${w.title} · ` : ''}${w.dest ? '🎯 ' + (w.dest.he && w.dest.he !== w.dest.name ? `${w.dest.he} - ${w.dest.name}` : w.dest.name) : CITY(w.city)}`];
-      if (price == null) L.push('לא נמצאה טיסה ישירה שמתאימה להגדרות שלך בתאריכים האלה.');
-      else {
-        L.push(`הכי זול: ${CITY(w.city)} — ${ils(price)}${pn > 1 ? ` לכל ${pn} הנוסעים (${ils(Math.round(price / pn))} לנוסע)` : ''}`);
-        L.push(`🛫 ${he(wOut[w.id].outDate)} ${a.dep} (${a.air}) · 🛬 ${he(wOut[w.id].backDate)} ${b.dep} (${b.air})`);
-        const cs = (wOut[w.id].cities || []).filter((c) => c.price != null && c.city !== w.city).sort((x, y) => x.price - y.price);
-        if (cs.length) L.push('ושאר היעדים: ' + cs.map((c) => `${CITY(c.city)} ${ils(pn > 1 ? Math.round(c.price / pn) : c.price)}`).join(' · ') + (pn > 1 ? ' (לנוסע)' : ''));
-      }
-      L.push('מעכשיו: בדיקה כל חצי שעה, והודעה על כל ירידה.');
-      if (process.env.PAGE_URL) L.push(process.env.PAGE_URL);
+      const L = [hello([w]), `✅ הבדיקה הראשונה הסתיימה${w.title ? `: 🧳 ${w.title}` : ''}`, ''];
+      if (price == null) L.push(`✈️ ${placeOf(w)}: לא נמצאה טיסה ישירה שמתאימה להגדרות שלך בתאריכים האלה.`);
+      else L.push(tripBlock(w, wOut[w.id], { noTitle: true }));
+      L.push('', 'מעכשיו: בדיקה כל חצי שעה, והודעה על כל ירידה.' + footer());
       notes.push(L.join('\n'));
     }
     if (price == null) continue;
@@ -527,7 +520,7 @@ function saveChannelStatus() {
     const under = w.target && price <= w.target;
     const firstUnder = under && !s.under;
     if (firstUnder || (s.last != null && s.last - price >= minDrop))
-      alerts.push({ w, price, a, b, rt: isRt, od: wOut[w.id].outDate, bd: wOut[w.id].backDate, why: under ? 'target' : 'drop', from: s.last });
+      alerts.push({ w, r: wOut[w.id], price, why: under ? 'target' : 'drop', from: s.last, lowest: h.length > 1 && price <= Math.min(...h.map((x) => x.price)) });
     if (w.target) s.under = under ? true : price > w.target + minDrop ? false : s.under;
     s.last = price;
   }
@@ -538,18 +531,19 @@ function saveChannelStatus() {
   const ilDate = `${il.find((x) => x.type === 'year').value}-${il.find((x) => x.type === 'month').value}-${il.find((x) => x.type === 'day').value}`;
   const ilHour = +il.find((x) => x.type === 'hour').value % 24;
   if (!ONLY_NEW && ilHour >= 8 && sys.daily !== ilDate && watches.length) {
-    const L = ['☀️ בוקר טוב! המחירים של הטיולים שלך הבוקר:', ''];
+    const L = [`☀️ בוקר טוב${(() => { const n = [...new Set(watches.map((w) => w.who).filter(Boolean))]; return n.length === 1 ? ', ' + n[0] : ''; })()}! המחירים של הבוקר:`];
     for (const w of watches) {
-      const r = wOut[w.id];
-      const p = r && r.price != null ? ils(r.price) : 'אין מחיר כרגע';
-      const t = w.target ? (r && r.price != null && r.price <= w.target ? ` ✅ מתחת ליעד (${ils(w.target)})` : ` · יעד ${ils(w.target)}`) : '';
-      const dd = r && r.outDate ? `${he(r.outDate)} – ${he(r.backDate)}` : `${he(w.out)} – ${he(w.back)}`;
-      const pp = paxOf(w), pn = paxCount(pp);
-      const nC = citiesOf(w).length, many = nC > 1;
-      L.push(`${w.title ? `🧳 ${w.title}: ` : ''}${CITY(w.city)}${many ? ` (הזול מבין ${nC} יעדים)` : ''} ${dd}${pn > 1 ? ` (${pn} נוסעים)` : ''}: ${p}${t}`);
+      const r = wOut[w.id], pp = paxOf(w), pn = paxCount(pp);
+      L.push('');
+      if (w.title) L.push(`🧳 ${w.title}`);
+      if (!r || r.price == null) { L.push(`✈️ ${placeOf(w)} · אין מחיר כרגע`); continue; }
+      L.push(`✈️ ${placeOf(w)} · דרך ${CITY(r.city || w.city)} · ${airHe(r.out) || 'טיסה ישירה'}`);
+      L.push(`🗓️ ${heFull(r.outDate)} ← ${heFull(r.backDate)} · ${nights(r.outDate, r.backDate)} לילות`);
+      L.push(`💰 *${ils(pn > 1 ? Math.round(r.price / pn) : r.price)}${pn > 1 ? ' לנוסע' : ''}*${pn > 1 ? ` · ${ils(r.price)} לכולם` : ''}${w.target ? (r.price <= w.target ? ` · ✅ מתחת ליעד (${ils(w.target)})` : ` · יעד ${ils(w.target)}`) : ''}`);
+      const h = wHist[w.id] || [], y = h.filter((x) => now - new Date(x.t) > 20 * 3600e3).pop();
+      if (y && y.price !== r.price) L.push(y.price > r.price ? `📉 ירד ב-${ils(y.price - r.price)} מאתמול` : `📈 עלה ב-${ils(r.price - y.price)} מאתמול`);
     }
-    L.push('', 'המערכת בודקת כל חצי שעה ותשלח הודעה על כל ירידה.');
-    if (process.env.PAGE_URL) L.push(process.env.PAGE_URL);
+    L.push('', 'המערכת בודקת כל חצי שעה ותשלח הודעה על כל ירידה.' + footer());
     notes.push(L.join('\n'));
     sys.daily = ilDate;
   }
@@ -576,22 +570,57 @@ function saveChannelStatus() {
 const DAY = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'שבת'];
 const he = (d) => { const [, m, day] = d.split('-'); const w = new Date(d + 'T12:00:00Z').getUTCDay(); return `${w === 6 ? 'שבת' : 'יום ' + DAY[w]} ${+day}.${+m}`; };
 const ils = (n) => '₪' + n.toLocaleString('en-US');
-function message(alerts) {
-  const L = [];
-  for (const { w, price, a, b, rt, od, bd, why, from } of alerts) {
-    if (w.title) L.push(`🧳 ${w.title}`);
-    L.push(`🔔 ${CITY(w.city)} — ${airLabel(w)} (ישיר) · ${paxText(paxOf(w))}`);
-    if (Array.isArray(w.cities) && new Set(w.cities).size > 1) L.push(`(הזול מבין: ${[...new Set(w.cities)].map(CITY).join(', ')})`);
-    L.push(from != null ? `המחיר ירד מ-${ils(from)} ל-${ils(price)}` : `המחיר עכשיו: ${ils(price)}`);
-    if (why === 'target') L.push(`✅ מתחת למחיר שקבעת (${ils(w.target)})!`);
-    L.push(`🛫 הלוך ${he(od)}, ${a.dep} (${a.air})${rt ? '' : ` — ${ils(a.price)}`}`);
-    L.push(`🛬 חזור ${he(bd)}, ${b.dep} (${b.air})${rt ? '' : ` — ${ils(b.price)}`}`);
-    if (rt) L.push('🎫 מחיר הלוך-חזור בכרטיס אחד');
-    if (paxCount(paxOf(w)) > 1) L.push(`💰 לכל ${paxCount(paxOf(w))} הנוסעים · בערך ${ils(Math.round(price / paxCount(paxOf(w))))} לנוסע`);
-    L.push(`🔎 בגוגל טיסות: ${gfRound(od, bd, cfg.origin, w.city, paxOf(w))}`);
-    L.push('');
+// גימטריה ליום בחודש (1–30)
+const gem = (n) => { const o = ['', 'א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ז', 'ח', 'ט'], t = ['', 'י', 'כ', 'ל'];
+  let x = n === 15 ? 'טו' : n === 16 ? 'טז' : t[Math.floor(n / 10)] + o[n % 10];
+  return x.length > 1 ? x.slice(0, -1) + '״' + x.slice(-1) : x + '׳'; };
+const heMonth = (d) => new Intl.DateTimeFormat('he-IL-u-ca-hebrew', { month: 'long', timeZone: 'UTC' }).format(new Date(d + 'T12:00:00Z'));
+const heDay = (d) => +new Intl.DateTimeFormat('en-u-ca-hebrew', { day: 'numeric', timeZone: 'UTC' }).format(new Date(d + 'T12:00:00Z'));
+// "יום ה׳ ט״ו באב (19.8)"
+const heFull = (d) => { const [, m, day] = d.split('-'); const w = new Date(d + 'T12:00:00Z').getUTCDay();
+  return `${w === 6 ? 'שבת' : 'יום ' + DAY[w]} ${gem(heDay(d))} ב${heMonth(d)} (${+day}.${+m})`; };
+const MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+const monthOf = (d) => `${MONTHS[+d.slice(5, 7) - 1]} ${d.slice(0, 4)}`;
+// "4:35 PM" ← "16:35"; "+1" ← "(למחרת)"
+const t24 = (s) => { const m = /(\d{1,2}):(\d\d)\s*([AP])M(\+\d)?/.exec(s || ''); if (!m) return s || '';
+  return `${String((+m[1] % 12) + (m[3] === 'P' ? 12 : 0)).padStart(2, '0')}:${m[2]}${m[4] ? ' (למחרת)' : ''}`; };
+const airHe = (a) => (a && a.air && AIR_HE[a.air.split(/[,·]/)[0].trim()]) || (a && a.air) || '';
+const nights = (a, b) => Math.round((new Date(b + 'T12:00:00Z') - new Date(a + 'T12:00:00Z')) / 864e5);
+const placeOf = (w) => w.dest ? (w.dest.he || w.dest.name) : CITY(w.city);
+const hello = (ws) => { const n = [...new Set(ws.map((w) => w.who).filter(Boolean))]; return `☀️ שלום וברכה${n.length === 1 ? ', ' + n[0] : ''}`; };
+
+// גוף ההודעה של טיול אחד. *מודגש* ו-[טקסט](קישור) — notify.js מתאים לכל ערוץ
+function tripBlock(w, r, o = {}) {
+  const L = [], pp = paxOf(w), pn = paxCount(pp), a = r.out, b = r.back, od = r.outDate, bd = r.backDate;
+  if (w.title && !o.noTitle) L.push(`🧳 ${w.title}`);
+  L.push(`✈️ הטיסה שלכם ל${placeOf(w)}, ${monthOf(od)}`);
+  if (o.from != null) L.push(`🔔 המחיר ירד מ-${ils(o.from)} ל-*${ils(r.price)}* (פחות ${ils(o.from - r.price)}, ${Math.round((o.from - r.price) / o.from * 100)}%)`);
+  else if (o.alert) L.push(`🔔 המחיר עכשיו: *${ils(r.price)}*`);
+  if (o.why === 'target') L.push(`✅ מתחת למחיר שקבעת (${ils(w.target)})`);
+  if (o.lowest) L.push('🏆 המחיר הכי נמוך שראינו');
+  L.push('');
+  L.push(`📍 דרך ${CITY(r.city || w.city)} · ${airHe(a) || 'טיסה'} · טיסה ישירה`);
+  L.push(`🛫 הלוך: ${heFull(od)} · ${t24(a.dep)}${a.arr ? ` ← נוחתים ${t24(a.arr)}` : ''}`);
+  L.push(`🛬 חזור: ${heFull(bd)} · ${t24(b.dep)}${b.arr ? ` ← נוחתים ${t24(b.arr)}` : ''}`);
+  L.push(`🌙 ${nights(od, bd)} לילות`);
+  L.push('');
+  const how = r.rt ? 'הלוך-חזור בכרטיס אחד' : 'שני כרטיסים לכיוון אחד';
+  L.push(pn > 1 ? `💰 *${ils(Math.round(r.price / pn))} לנוסע* · ${ils(r.price)} ל-${paxText(pp)} · ${how}` : `💰 *${ils(r.price)}* · ${how}`);
+  // שאר שדות התעופה — שורה קצרה לכל אחד
+  const cs = (r.cities || []).filter((c) => c.city !== (r.city || w.city)).sort((x, y) => (x.price ?? 1e9) - (y.price ?? 1e9));
+  if (cs.length) {
+    L.push('', `🗺️ שאר השדות${pn > 1 ? ' (לנוסע)' : ''}:`);
+    for (const c of cs) L.push(`▫️ ${CITY(c.city)} — ${c.price != null
+      ? `${ils(pn > 1 ? Math.round(c.price / pn) : c.price)} · ${+c.outDate.slice(8)}.${+c.outDate.slice(5, 7)}–${+c.backDate.slice(8)}.${+c.backDate.slice(5, 7)}${c.price - r.price > 0 ? ` (יקר ב-${ils(pn > 1 ? Math.round((c.price - r.price) / pn) : c.price - r.price)})` : ''}`
+      : c.none ? (c.why === 'nodirect' ? 'אין טיסה ישירה' : c.why === 'retry' ? 'לא נמצא הפעם, ייבדק שוב' : 'אין טיסה לפי ההגדרות') : 'עוד נבדק'}`);
   }
-  L.push('המחיר מ-Google Flights. לפני הזמנה — לבדוק באתר של החברה.');
-  if (process.env.PAGE_URL) L.push(process.env.PAGE_URL);
+  L.push('', `[🔎 לפתוח בגוגל טיסות](${gfRound(od, bd, cfg.origin, r.city || w.city, pp)})`);
   return L.join('\n');
+}
+const footer = () => ['', ...(process.env.PAGE_URL ? [`[📊 כל הטיולים באתר](${process.env.PAGE_URL})`] : []), 'המחיר מ-Google Flights. לפני הזמנה — לבדוק באתר של החברה.'].join('\n');
+
+function message(alerts) {
+  const parts = [hello(alerts.map((x) => x.w))];
+  for (const x of alerts) parts.push(tripBlock(x.w, x.r, { from: x.from, why: x.why, lowest: x.lowest, alert: true }));
+  return parts.join('\n\n') + '\n' + footer();
 }

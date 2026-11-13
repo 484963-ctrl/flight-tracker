@@ -456,7 +456,8 @@ document.addEventListener('change', (e) => {
 function tripForm(p, w = {}) {
   const airs = w.id ? airsOf(w) : ['El Al'];
   return `<div class="tf">
-    <div class="row"><label style="flex:1;min-width:240px">🧳 שם הטיול (לא חובה)<input id="${p}Title" maxlength="60" placeholder="למשל: משפחת גינצברג · קיץ טירול 2027" value="${(w.title || '').replace(/"/g, '&quot;')}"></label></div>
+    <div class="row"><label style="flex:1;min-width:240px">🧳 שם הטיול (לא חובה)<input id="${p}Title" maxlength="60" placeholder="למשל: משפחת גינצברג · קיץ טירול 2027" value="${(w.title || '').replace(/"/g, '&quot;')}"></label>
+      <label style="flex:1;min-width:200px">👋 למי ההודעה (לא חובה)<input id="${p}Who" maxlength="40" placeholder="למשל: משפחת גינצברג" value="${(w.who || '').replace(/"/g, '&quot;')}"></label></div>
     <div class="row">
 
       ${(() => { const px = paxOf(w), sel = (id, v, from, to, lbl) => `<label>${lbl}<select id="${p}${id}">${Array.from({ length: to - from + 1 }, (_, i) => i + from).map((n) => `<option value="${n}" ${n === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>`;
@@ -486,6 +487,7 @@ function readTrip(p) {
     airlines: [...document.querySelectorAll(`[data-air="${p}"]:checked`)].map((x) => x.value), noShabbat: $(`#${p}NoSh`).checked,
     pax: { adults: +$(`#${p}PA`).value, children: +$(`#${p}PC`).value, infants: +$(`#${p}PI`).value },
     title: ($(`#${p}Title`).value || '').trim(),
+    who: ($(`#${p}Who`).value || '').trim(),
     cities: [...new Set([...document.querySelectorAll(DEST[p] ? `#${p}DAir [data-city="${p}"]:checked` : `#${p}Chips [data-city="${p}"]:checked`)].map((x) => x.value))],
     dest: DEST[p] ? { name: DEST[p].name, lat: DEST[p].lat, lon: DEST[p].lon, hours: DEST[p].hours, img: DEST[p].img || PIMG[DEST[p].name] || null, he: ($(`#${p}DHe`) && $(`#${p}DHe`).value.trim()) || DEST[p].he || '' } : null,
     drive: DEST[p] ? Object.fromEntries(Object.entries(DEST[p].drive).filter(([, t]) => t <= DEST[p].hours * 3600)) : null };
