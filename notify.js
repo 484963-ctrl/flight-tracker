@@ -8,7 +8,20 @@ const E = process.env;
 const LINK = /\[([^\]]+)\]\((https?:[^)\s]+)\)/g;
 const escH = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const asHtml = (t) => escH(t).replace(LINK, (_, l, u) => `<a href="${u.replace(/"/g, '&quot;')}">${l}</a>`).replace(/\*([^*\n]+)\*/g, '<b>$1</b>');
-const asPlain = (t, bold) => t.replace(LINK, (_, l, u) => `${l}:\n${u}`).replace(/\*([^*\n]+)\*/g, bold ? '*$1*' : '$1');
+const asPlain = (t, bold) => t.replace(LINK, (_, l, u) => `${l}${[...l].length > 2 ? ':' : ''} ${u}`).replace(/\*([^*\n]+)\*/g, bold ? '*$1*' : '$1');
+// קישור קצר (is.gd) — בוואטסאפ אי אפשר להסתיר קישור מאחורי מילים. אם נכשל — הקישור המלא
+const short = {};
+async function shorten(u) {
+  if (u.length < 60) return u;
+  if (!short[u]) short[u] = fetch('https://is.gd/create.php?format=simple&url=' + encodeURIComponent(u), { signal: AbortSignal.timeout(8000) })
+    .then((r) => r.text()).then((t) => (/^https:\/\/is\.gd\/\w+$/.test(t.trim()) ? t.trim() : u)).catch(() => u);
+  return short[u];
+}
+async function shortLinks(t) {
+  const urls = [...new Set([...t.matchAll(LINK)].map((m) => m[2]))];
+  const map = Object.fromEntries(await Promise.all(urls.map(async (u) => [u, await shorten(u)])));
+  return t.replace(LINK, (_, l, u) => `[${l}](${map[u]})`);
+}
 
 async function telegram(text) {
   if (!E.TELEGRAM_TOKEN) return 'טלגרם: לא הוגדר';
@@ -32,7 +45,7 @@ async function telegram(text) {
 }
 
 async function whatsapp(text) {
-  text = asPlain(text, true);
+  text = asPlain(await shortLinks(text), true);
   // TextMeBot: נשלח מהוואטסאפ שחובר אצלם, לכל המספרים ב-WHATSAPP_TO (מופרדים בפסיק)
   if (E.TEXTMEBOT_APIKEY) {
     const to = (E.WHATSAPP_TO || E.WHATSAPP_PHONE || '').split(',').map((x) => x.trim()).filter(Boolean);
