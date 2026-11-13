@@ -571,7 +571,7 @@ function saveChannelStatus() {
   const fileTest = rd('test-request.json', {}).at;
   const testFile = fileTest && fileTest !== sys.testFile;
   if (testFile) { sys.testFile = fileTest; wr('data/state.json', state); }
-  if (!alerts.length && (process.env.TEST_NOTIFY || testReq || testFile)) await notify.send('✈️ בדיקה: מעקב הטיסות מחובר ועובד.\nתקבל הודעה על כל ירידה במחיר של טיול שלך, וסיכום כל בוקר.' + (process.env.PAGE_URL ? '\n\n' + process.env.PAGE_URL : ''));
+  if (!alerts.length && (process.env.TEST_NOTIFY || testReq || testFile)) await notify.send(statusMessage(watches, wOut, '✅ בדיקה: מעקב הטיסות מחובר ועובד. ככה נראים הטיולים שלך עכשיו:'));
   saveChannelStatus();
 })();
 
@@ -596,14 +596,14 @@ const t24 = (s) => { const m = /(\d{1,2}):(\d\d)\s*([AP])M(\+\d)?/.exec(s || '')
   return `${String((+m[1] % 12) + (m[3] === 'P' ? 12 : 0)).padStart(2, '0')}:${m[2]}${m[4] ? ' (למחרת)' : ''}`; };
 const airHe = (a) => (a && a.air && AIR_HE[a.air.split(/[,·]/)[0].trim()]) || (a && a.air) || '';
 const nights = (a, b) => Math.round((new Date(b + 'T12:00:00Z') - new Date(a + 'T12:00:00Z')) / 864e5);
-const placeOf = (w) => w.dest ? (w.dest.he || w.dest.name) : CITY(w.city);
+const placeOf = (w, r) => w.dest ? (w.dest.he || w.dest.name) : CITY((r && r.city) || w.city);
 const hello = (ws) => { const n = [...new Set(ws.map((w) => w.who).filter(Boolean))]; return `☀️ שלום וברכה${n.length === 1 ? ', ' + n[0] : ''}`; };
 
 // גוף ההודעה של טיול אחד. *מודגש* ו-[טקסט](קישור) — notify.js מתאים לכל ערוץ
 function tripBlock(w, r, o = {}) {
   const L = [], pp = paxOf(w), pn = paxCount(pp), a = r.out, b = r.back, od = r.outDate, bd = r.backDate;
   if (w.title && !o.noTitle) L.push(`🧳 ${w.title}`);
-  L.push(`✈️ הטיסה שלכם ל${placeOf(w)}, ${monthOf(od)}`);
+  L.push(`✈️ הטיסה שלכם ל${placeOf(w, r)}, ${monthOf(od)}`);
   const per = (n) => Math.round(n / pn), pl = pn > 1 ? ' לנוסע' : '';
   if (o.from != null) L.push(`🔔 המחיר${pl} ירד מ-${ils(per(o.from))} ל-*${both(per(r.price))}* (פחות ${ils(per(o.from - r.price))}${pl}, ${Math.round((o.from - r.price) / o.from * 100)}%)`);
   else if (o.alert) L.push(`🔔 המחיר${pl} עכשיו: *${both(per(r.price))}*`);
@@ -627,6 +627,12 @@ function tripBlock(w, r, o = {}) {
 }
 const footer = () => ['', ...(process.env.PAGE_URL ? [`[📊 כל הטיולים באתר](${process.env.PAGE_URL})`] : []), 'המחיר מ-Google Flights. לפני הזמנה — לבדוק באתר של החברה.'].join('\n');
 
+// מצב כל הטיולים עכשיו, בנוסח של ההתראות (להודעת בדיקה)
+function statusMessage(ws, wOut, head) {
+  const parts = [hello(ws) + '\n' + head];
+  for (const w of ws) { const r = wOut[w.id]; if (r && r.price != null && r.out && r.back) parts.push(tripBlock(w, r)); else parts.push(`${w.title ? `🧳 ${w.title}\n` : ''}✈️ ${placeOf(w)} · אין מחיר כרגע`); }
+  return parts.join('\n\n') + '\n' + footer();
+}
 function message(alerts) {
   const parts = [hello(alerts.map((x) => x.w))];
   for (const x of alerts) parts.push(tripBlock(x.w, x.r, { from: x.from, why: x.why, lowest: x.lowest, alert: true }));
