@@ -439,6 +439,14 @@ function saveChannelStatus() {
           cap = order.length; P.grid = 'ALL'; P.covered = P.allDates.length;
         } else order = P.pairs.map((x) => ({ o: x.o, k: x.k })); // בלי טבלה: לפי המחירים לכיוון אחד
       } else P.covered = order.length;
+      // קודם — הצירוף שהיה הכי זול בבדיקה הקודמת (אחרת המחיר "קופץ" כשהחיפוש לא מגיע אליו)
+      const pw = (prev.watches || {})[w.parent] || {};
+      const pc = (pw.cities || []).find((c) => c.city === w.city) || (pw.city === w.city ? pw : null);
+      if (pc && pc.rt && pc.outDate && pc.backDate) {
+        const i = order.findIndex((x) => x.o.d === pc.outDate && x.k.d === pc.backDate);
+        const x = i >= 0 ? order[i] : P.allDates.find((x) => x.o.d === pc.outDate && x.k.d === pc.backDate);
+        if (x) { if (i >= 0) order.splice(i, 1); order = [{ ...x, g: undefined, prevBest: true }, ...order]; cap++; }
+      }
       let best = null, tries = 0;
       for (const x of order) {
         if (best && x.g != null && x.g >= best.r.price) break;  // גם המחיר בלי הגבלות לא זול יותר — סיימנו
@@ -521,8 +529,10 @@ function saveChannelStatus() {
     // התראה על כל ירידה (₪30 ומעלה) מאז הבדיקה הקודמת; ובנוסף — כשהמחיר עובר אל מתחת ליעד
     const under = w.target && price <= w.target;
     const firstUnder = under && !s.under;
-    if (firstUnder || (s.last != null && s.last - price >= minDrop))
-      alerts.push({ w, r: wOut[w.id], price, why: under ? 'target' : 'drop', from: s.last, lowest: h.length > 1 && price <= Math.min(...h.map((x) => x.price)) });
+    const day = h.filter((x) => x.t !== now.toISOString() && now - new Date(x.t) < 24 * 3600e3).map((x) => x.price);
+    const ref = day.length ? Math.min(...day) : s.last; // ירידה = מתחת למחיר הכי נמוך ב-24 השעות האחרונות
+    if (firstUnder || (ref != null && ref - price >= minDrop))
+      alerts.push({ w, r: wOut[w.id], price, why: under ? 'target' : 'drop', from: ref, lowest: h.length > 1 && price <= Math.min(...h.map((x) => x.price)) });
     if (w.target) s.under = under ? true : price > w.target + minDrop ? false : s.under;
     s.last = price;
   }
