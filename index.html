@@ -175,8 +175,7 @@
   </div>
 
   <div class="box" id="waitBox" style="display:none;background:#fff8e6;border-color:#f3d48b">
-    ⏳ <b>החשבון ממתין לאישור.</b> אפשר כבר להוסיף טיולים — הם נשמרים, והבדיקות וההתראות יתחילו אחרי האישור.
-    <div class="form" style="margin-top:8px"><label>יש לך קוד הזמנה?<input id="wInv" style="width:140px" autocomplete="off"></label><button id="wJoin">אישור</button></div><div class="msg" id="wMsg"></div>
+    ⏳ <b>החשבון ממתין לאישור של המנהל.</b> אפשר כבר להוסיף טיולים ולכתוב מספר וואטסאפ — הם נשמרים, והבדיקות וההתראות יתחילו מיד אחרי האישור.
   </div>
 
   <div class="sec">🧳 הטיולים שלי במעקב</div>
@@ -206,7 +205,7 @@
   <div class="box" id="admBox" style="display:none">
     <b style="font-size:18px">🛠️ משתמשים (רק למנהל)</b>
     <div class="form" style="margin-top:8px"><label>🎟️ קוד הזמנה לחברים<input id="admInv" style="width:160px" autocomplete="off" placeholder="לפחות 4 תווים"></label><button id="admInvSave">שמירת קוד</button><span class="small" id="admInvSt" style="align-self:center"></span></div>
-    <div class="note">מי שנרשם עם הקוד מאושר מיד, ואתה מקבל הודעה. החלפת קוד — הקוד הישן מפסיק לעבוד (מי שכבר נרשם נשאר).</div>
+    <div class="note">בלי הקוד אי אפשר להירשם. מי שנרשם עם הקוד מחכה לאישור שלך — ותקבל על זה הודעה. החלפת קוד: הקוד הישן מפסיק לעבוד (מי שכבר נרשם נשאר).</div>
     <div id="admList" style="margin-top:8px"></div>
     <div class="msg" id="admMsg"></div>
   </div>
@@ -750,14 +749,9 @@ $('#pSave').onclick = async () => {
     m.className = 'msg ok'; m.textContent = '✓ נשמר.'; await load();
   } catch (e) { m.className = 'msg err'; m.textContent = e.message; }
 };
-$('#wJoin').onclick = async () => {
-  const ok = await rpc('ft_join', { code: $('#wInv').value.trim() }).catch(() => false);
-  $('#wMsg').className = 'msg ' + (ok ? 'ok' : 'err'); $('#wMsg').textContent = ok ? '✓ אושר! הבדיקות יתחילו תוך כמה דקות.' : 'קוד ההזמנה לא נכון.';
-  if (ok) load();
-};
 $('#admInvSave').onclick = async () => {
   const ok = await rpc('ft_admin_invite', { code: $('#admInv').value }).catch(() => false);
-  $('#admMsg').className = 'msg ' + (ok ? 'ok' : 'err'); $('#admMsg').textContent = ok ? '✓ הקוד נשמר. שולחים לחברים את הקישור לאתר ואת הקוד.' : 'הקוד צריך להיות לפחות 4 תווים.';
+  $('#admMsg').className = 'msg ' + (ok ? 'ok' : 'err'); $('#admMsg').textContent = ok ? '✓ הקוד נשמר. שולחים לחברים את הקישור לאתר ואת הקוד — ואחרי שהם נרשמים, מאשרים כאן.' : 'הקוד צריך להיות לפחות 4 תווים.';
   if (ok) { $('#admInv').value = ''; renderAdmin(true); }
 };
 // --- ניהול משתמשים (מנהל) ---
@@ -766,7 +760,7 @@ async function renderAdmin(force) {
   if (!ADM || force) { try { ADM = await rpc('ft_admin_list'); } catch { ADM = []; } try { $('#admInvSt').textContent = (await rpc('ft_admin_has_invite')) ? '✓ יש קוד פעיל' : '✗ עוד אין קוד — בלי קוד אי אפשר להצטרף'; } catch {} }
   $('#admList').innerHTML = !ADM.length ? '<div class="note">עוד אין משתמשים.</div>' : `<table><tr><th>משתמש</th><th>טיולים</th><th>טלגרם</th><th>וואטסאפ</th><th>מצב</th><th></th></tr>${ADM.map((u) => `<tr>
     <td>${esc(u.name || '—')}<span class="small"><bdi dir="ltr">${esc(u.email || '')}</bdi></span></td><td>${u.trips}</td><td>${u.tg ? '✓' : '—'}</td><td>${u.whatsapp ? `<bdi dir="ltr">${esc(u.whatsapp)}</bdi>` : '—'}</td>
-    <td>${u.admin ? '⭐ מנהל' : u.blocked ? '⛔ חסום' : u.approved ? '✅ מאושר' : '⏳ ממתין'}</td>
+    <td>${u.admin ? '⭐ מנהל' : u.blocked ? '⛔ חסום' : u.approved ? '✅ מאושר' : u.invited ? '⏳ ממתין לאישור' : '⏳ בלי קוד הזמנה'}</td>
     <td>${u.admin ? '' : `${!u.approved || u.blocked ? `<button data-adm="${u.id}" data-a="1" data-b="0">✅ אישור</button>` : ''} ${!u.blocked ? `<button data-adm="${u.id}" data-a="${u.approved ? 1 : 0}" data-b="1">⛔ חסימה</button>` : ''}`}</td></tr>`).join('')}</table>`;
   document.querySelectorAll('[data-adm]').forEach((b) => b.onclick = async () => {
     const ok = await rpc('ft_admin_set', { p_uid: b.dataset.adm, p_approved: b.dataset.a === '1', p_blocked: b.dataset.b === '1' }).catch(() => false);

@@ -258,7 +258,7 @@ async function rtSearch(ctx, o, b, from, to, pax, okOut, okBack) {
 let settings = {};
 // הטיולים נשמרים במסד (Supabase) — מה שהוגדר באתר
 // משתמשים (כמה חשבונות): uid ← { name, whatsapp, tg_chat, settings, admin }. null = מצב ישן, משתמש אחד
-let USERS = null;
+let USERS = null, PENDING = [];
 const SCAN_KEY = process.env.TEXTMEBOT_APIKEY ? 'flights-scan:' + process.env.TEXTMEBOT_APIKEY : '';
 const ownerName = (owner) => (owner && USERS && USERS[owner] && USERS[owner].name) || '';
 const adminId = () => (USERS && Object.keys(USERS).find((id) => USERS[id].admin)) || null;
@@ -285,6 +285,7 @@ async function loadWatches() {
       USERS = {}; const all = [];
       for (const u of us) { USERS[u.id] = u; for (const w of u.watches || []) if (w && w.id) all.push({ ...w, owner: u.id }); }
       watches = all; wr('.cache-watches.json', all);
+      try { const p = await fetch(`${sb.url}/rest/v1/rpc/ft_scan_pending`, { method: 'POST', headers: { apikey: sb.key, 'Content-Type': 'application/json' }, body: JSON.stringify({ key: SCAN_KEY }) }); PENDING = p.ok ? (await p.json()) || [] : []; } catch {}
       console.log(`${us.length} משתמשים, ${all.length} טיולים`);
       return;
     }
@@ -622,10 +623,15 @@ function saveChannelStatus() {
     const first = !Object.keys(known).length; // בהפעלה הראשונה — רק זוכרים את מי שכבר קיים
     for (const [id, u] of Object.entries(USERS)) {
       const k = (known[id] = known[id] || {});
-      if (!k.seen) { k.seen = now.toISOString(); if (!first && !u.admin) note(null, `👤 הצטרף משתמש חדש: ${u.name || '(עוד בלי שם)'}${u.whatsapp ? ` · ${u.whatsapp}` : ''}. אפשר לראות ולחסום ב"🛠️ משתמשים" באתר.`); if (first || u.admin) k.welcomed = true; }
+      if (!k.seen) { k.seen = now.toISOString(); if (first || u.admin) k.welcomed = true; }
       if (!k.welcomed && (u.whatsapp || u.tg_chat)) { k.welcomed = now.toISOString();
         await sendTo(id, `${hello([], u.name)}\nברוך הבא למעקב הטיסות! ✈️\nכאן תקבל התראה על כל ירידה במחיר של הטיולים שלך, וסיכום כל בוקר ב-8:00.${footer()}`); }
     }
+  }
+  // נרשם עם קוד הזמנה וממתין לאישור — הודעה למנהל (פעם אחת)
+  if (USERS) for (const p of PENDING) {
+    const k = ((sys.pend = sys.pend || {})[p.id]);
+    if (!k) { sys.pend[p.id] = now.toISOString(); note(null, `👤 נרשם משתמש חדש וממתין לאישור שלך:\n${p.email}${p.name ? ` (${p.name})` : ''}\nלאישור: באתר ← "🛠️ משתמשים" ← ✅ אישור.${process.env.PAGE_URL ? '\n' + process.env.PAGE_URL : ''}`); }
   }
   await sendNotes(notes);
   // "שלח הודעת בדיקה" מהאתר — לכל משתמש לפי הבקשה שלו
