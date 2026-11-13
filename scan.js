@@ -602,30 +602,32 @@ const hello = (ws) => { const n = [...new Set(ws.map((w) => w.who).filter(Boolea
 // גוף ההודעה של טיול אחד. *מודגש* ו-[טקסט](קישור) — notify.js מתאים לכל ערוץ
 function tripBlock(w, r, o = {}) {
   const L = [], pp = paxOf(w), pn = paxCount(pp), a = r.out, b = r.back, od = r.outDate, bd = r.backDate;
-  if (w.title && !o.noTitle) L.push(`🧳 ${w.title}`);
-  L.push(`✈️ הטיסה שלכם ל${placeOf(w, r)}, ${monthOf(od)}`);
   const per = (n) => Math.round(n / pn), pl = pn > 1 ? ' לנוסע' : '';
-  if (o.from != null) L.push(`🔔 המחיר${pl} ירד מ-${ils(per(o.from))} ל-*${both(per(r.price))}* (פחות ${ils(per(o.from - r.price))}${pl}, ${Math.round((o.from - r.price) / o.from * 100)}%)`);
-  else if (o.alert) L.push(`🔔 המחיר${pl} עכשיו: *${both(per(r.price))}*`);
-  if (o.why === 'target') L.push(`✅ מתחת למחיר שקבעת (${ils(per(w.target))}${pl})`);
-  if (o.lowest) L.push('🏆 המחיר הכי נמוך שראינו');
-  L.push(`📍 דרך ${CITY(r.city || w.city)} · ${airHe(a) || 'טיסה'} · טיסה ישירה${r.rt ? '' : ' · שני כרטיסים לכיוון אחד'}`);
-  L.push(pn > 1 ? `💰 *${both(per(r.price))} לנוסע* · ${both(r.price)} ל-${paxText(pp)}` : `💰 *${both(r.price)}*`);
-  L.push(`🛫 הלוך: ${heFull(od)} · ${t24(a.dep)}${a.arr ? ` ← נוחתים ${t24(a.arr)}` : ''}`);
-  L.push(`🛬 חזור: ${heFull(bd)} · ${t24(b.dep)}${b.arr ? ` ← נוחתים ${t24(b.arr)}` : ''}`);
-  L.push(`[🔎 לפתוח בגוגל טיסות](${gfRound(od, bd, cfg.origin, r.city || w.city, pp)})`);
-  L.push(`🌙 ${nights(od, bd)} לילות`);
-  // שאר שדות התעופה — שורה קצרה לכל אחד
+  const dm = (d) => `${+d.slice(8)}.${+d.slice(5, 7)}`;
+  // "ב׳ י״ג באב (16.8) 18:00–20:50" — קצר, כדי שכל דבר ייכנס בשורה בטלפון
+  const leg = (d, f) => { const w0 = new Date(d + 'T12:00:00Z').getUTCDay();
+    return `${w0 === 6 ? 'שבת' : DAY[w0]} ${gem(heDay(d))} ב${heMonth(d)} (${dm(d)}) ${t24(f.dep).replace(' (למחרת)', '')}${f.arr ? '–' + t24(f.arr).replace(' (למחרת)', '+1') : ''}`; };
+  if (w.title && !o.noTitle) L.push(`*${w.title}*`);
+  L.push(`✈️ ${placeOf(w, r)}, ${monthOf(od)}`);
+  if (o.from != null) L.push(`🔔 ירד מ-${ils(per(o.from))} ל-${ils(per(r.price))}${pl} (${Math.round((o.from - r.price) / o.from * 100)}%-)`);
+  if (o.why === 'target') L.push(`✅ מתחת ליעד שלך (${ils(per(w.target))}${pl})`);
+  if (o.lowest) L.push('🏆 הכי זול שראינו');
+  L.push(`דרך ${CITY(r.city || w.city)} · ${airHe(a) || 'טיסה'} ישיר${r.rt ? '' : ' · 2 כרטיסים'}`);
+  L.push(`💰 *${both(per(r.price))}${pl}*`);
+  if (pn > 1) L.push(`ביחד ${both(r.price)} · ${pn} נוסעים`);
+  L.push(`הלוך: ${leg(od, a)}`);
+  L.push(`חזור: ${leg(bd, b)}`);
+  L.push(`${nights(od, bd)} לילות · [גוגל טיסות](${gfRound(od, bd, cfg.origin, r.city || w.city, pp)})`);
   const cs = (r.cities || []).filter((c) => c.city !== (r.city || w.city)).sort((x, y) => (x.price ?? 1e9) - (y.price ?? 1e9));
   if (cs.length) {
-    L.push('', `🗺️ שאר השדות${pn > 1 ? ' (לנוסע)' : ''}:`);
-    for (const c of cs) L.push(`▫️ ${CITY(c.city)} — ${c.price != null
-      ? `${both(pn > 1 ? Math.round(c.price / pn) : c.price)} · ${+c.outDate.slice(8)}.${+c.outDate.slice(5, 7)}–${+c.backDate.slice(8)}.${+c.backDate.slice(5, 7)} · [🔎](${gfRound(c.outDate, c.backDate, cfg.origin, c.city, pp)})`
-      : c.none ? (c.why === 'nodirect' ? 'אין טיסה ישירה' : c.why === 'retry' ? 'לא נמצא הפעם, ייבדק שוב' : 'אין טיסה לפי ההגדרות') : 'עוד נבדק'}`);
+    L.push('', `שאר השדות${pl}:`);
+    for (const c of cs) L.push(c.price != null
+      ? `${CITY(c.city)} ${both(per(c.price))} ${dm(c.outDate)}–${dm(c.backDate)} [·](${gfRound(c.outDate, c.backDate, cfg.origin, c.city, pp)})`
+      : `${CITY(c.city)} — ${c.none ? (c.why === 'nodirect' ? 'אין טיסה ישירה' : c.why === 'retry' ? 'לא נמצא הפעם' : 'אין לפי ההגדרות') : 'עוד נבדק'}`);
   }
   return L.join('\n');
 }
-const footer = () => ['', ...(process.env.PAGE_URL ? [`[📊 כל הטיולים באתר](${process.env.PAGE_URL})`] : []), 'המחיר מ-Google Flights. לפני הזמנה — לבדוק באתר של החברה.'].join('\n');
+const footer = () => ['', ...(process.env.PAGE_URL ? [`[כל הטיולים](${process.env.PAGE_URL})`] : []), 'מחיר מ-Google Flights, לבדוק לפני הזמנה.'].join('\n');
 
 // מצב כל הטיולים עכשיו, בנוסח של ההתראות (להודעת בדיקה)
 function statusMessage(ws, wOut, head) {

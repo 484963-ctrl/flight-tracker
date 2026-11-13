@@ -7,8 +7,8 @@ const E = process.env;
 // ההודעה כתובה עם *מודגש* ו-[טקסט](קישור); כל ערוץ מקבל את הצורה שלו
 const LINK = /\[([^\]]+)\]\((https?:[^)\s]+)\)/g;
 const escH = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const asHtml = (t) => escH(t).replace(LINK, (_, l, u) => `<a href="${u.replace(/"/g, '&quot;')}">${l}</a>`).replace(/\*([^*\n]+)\*/g, '<b>$1</b>');
-const asPlain = (t, bold) => t.replace(LINK, (_, l, u) => `${l}${[...l].length > 2 ? ':' : ''} ${u}`).replace(/\*([^*\n]+)\*/g, bold ? '*$1*' : '$1');
+const asHtml = (t) => escH(t).replace(LINK, (_, l, u) => `<a href="${u.replace(/"/g, '&quot;')}">${l === '·' ? 'טיסות' : l}</a>`).replace(/\*([^*\n]+)\*/g, '<b>$1</b>');
+const asPlain = (t, bold) => t.replace(LINK, (_, l, u) => l === '·' ? u : `${l}${[...l].length > 2 ? ':' : ''} ${u}`).replace(/\*([^*\n]+)\*/g, bold ? '*$1*' : '$1');
 // קישור קצר (is.gd) — בוואטסאפ אי אפשר להסתיר קישור מאחורי מילים. אם נכשל — הקישור המלא
 const short = {};
 async function shorten(u) {
