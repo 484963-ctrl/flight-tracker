@@ -283,10 +283,45 @@ const baOf = (w, leg) => {
 };
 const flexSel = (id, [b, a]) => ['B', 'A'].map((k, i) => `<label>${i ? 'גמישות אחרי' : 'גמישות לפני'}<select id="${id}${k}">${FLEX.map(([n, t]) => `<option value="${n}" ${([b, a][i] || 0) === n ? 'selected' : ''}>${t}</option>`).join('')}</select></label>`).join('');
 // --- לפי מקום ושעות נסיעה ברכב: שדות תעופה עם טיסות ישירות, עד X שעות נסיעה מהמקום ---
-const DEST = {}; // לכל טופס: { name, lat, lon, hours, drive: { CODE: שניות } }
+const DEST = {}, P_ND = {}; // לכל טופס: { name, lat, lon, hours, drive: { CODE: שניות } }
 const hm = (sec) => `${Math.floor(sec / 3600)}:${String(Math.round(sec % 3600 / 60)).padStart(2, '0')} שעות`;
 // תמונה של המקום עצמו (למשל Galtür) — מוויקיפדיה, שמורה בדפדפן
 const PIMG = (() => { try { return JSON.parse(localStorage.getItem('flights-place-img') || '{}'); } catch { return {}; } })();
+// שם המקום בעברית: מ-OpenStreetMap (name:he) או מוויקיפדיה העברית; אפשר לתקן בטופס
+async function placeHe(name, nd) {
+  if (nd && nd['name:he']) return nd['name:he'];
+  for (const lang of ['en', 'de']) {
+    try {
+      const d = await fetch(`https://${lang}.wikipedia.org/w/api.php?action=query&format=json&origin=*&prop=langlinks&lllang=he&redirects=1&titles=${encodeURIComponent(name)}`).then((r) => r.json());
+      const pg = Object.values((d.query && d.query.pages) || {})[0];
+      const he = pg && pg.langlinks && pg.langlinks[0] && pg.langlinks[0]['*'];
+      if (he) return he.replace(/ \(.*\)$/, '');
+    } catch {}
+  }
+  return translit(name);
+}
+// אם אין שם עברי — תעתיק פשוט (אפשר לתקן בטופס)
+function translit(name) {
+  let w = name.toLowerCase().normalize('NFC').replace(/ß/g, 'ss').replace(/\./g, '');
+  const D = [['tsch', 'צ׳'], ['ay', 'אי'], ['ee', 'י'], ['sch', 'ש'], ['ch', 'ך'], ['sh', 'ש'], ['tz', 'צ'], ['ph', 'פ'], ['th', 'ת'], ['ei', 'יי'], ['ie', 'י'], ['au', 'או'], ['eu', 'וי'], ['äu', 'וי'], ['oo', 'ו'], ['ou', 'ו'], ['ck', 'ק'], ['ss', 'ס'], ['ll', 'ל'], ['tt', 'ט'], ['nn', 'נ'], ['mm', 'מ'], ['ff', 'פ'], ['rr', 'ר'], ['pp', 'פ'], ['gg', 'ג'], ['bb', 'ב']];
+  const S = { a: 'א', b: 'ב', c: 'ק', d: 'ד', e: '', f: 'פ', g: 'ג', h: 'ה', i: 'י', j: 'י', k: 'ק', l: 'ל', m: 'מ', n: 'נ', o: 'ו', p: 'פ', q: 'ק', r: 'ר', s: 'ס', t: 'ט', u: 'ו', v: 'ו', w: 'ו', x: 'קס', y: 'י', z: 'צ', ä: '', ö: 'ו', ü: 'ו', é: '', è: '', à: 'א', ó: 'ו', í: 'י' };
+  const fin = { 'כ': 'ך', 'מ': 'ם', 'נ': 'ן', 'פ': 'ף', 'צ': 'ץ' };
+  return w.split(/([\s\-]+)/).map((part) => {
+    if (/^[\s\-]+$/.test(part)) return part.includes('-') ? '-' : ' ';
+    let out = '';
+    for (let i = 0; i < part.length;) {
+      const dg = D.find(([k]) => part.startsWith(k, i));
+      if (dg) { out += dg[1]; i += dg[0].length; continue; }
+      const ch = part[i];
+      if (i > 0 && ch === 'a') { i++; continue; }
+      out += i === 0 && /[aeäéi]/.test(ch) ? (ch === 'i' ? 'אי' : 'א') : (S[ch] ?? ''); i++;
+    }
+    out = out.replace(/ך(?=.)/g, 'כ');
+    const last = out.slice(-1);
+    return fin[last] ? out.slice(0, -1) + fin[last] : out;
+  }).join('');
+}
+const destLabel = (d) => d ? (d.he && d.he !== d.name ? `${d.he} - ${d.name}` : d.name) : '';
 async function placeImg(name) {
   if (!name) return null;
   if (name in PIMG) return PIMG[name];
@@ -315,6 +350,7 @@ function destBox(p, w) {
       ${d ? `<button type="button" data-dclear="${p}">✕ ביטול</button>` : ''}
     </div>
     <div class="msg" id="${p}DMsg"></div>
+    <div class="row" id="${p}DHeRow" style="${d ? '' : 'display:none'};margin-top:6px"><label>השם בעברית (אפשר לתקן)<input id="${p}DHe" value="${d && d.he ? d.he : ''}" placeholder="למשל: גלטור"></label></div>
     <div id="${p}DAir">${d ? destList(p, w.cities || citiesOfW(w)) : ''}</div>
   </details>`;
 }
@@ -326,7 +362,7 @@ function destList(p, checked) {
     <div class="chips" style="margin-top:8px">${list.map(([c, t]) => { const nd = L.noDirect && L.noDirect[c]; return `<label class="chip" ${nd ? 'style="opacity:.6" title="בבדיקות האחרונות לא נמצאו טיסות ישירות מתל אביב לשדה הזה"' : ''}><input type="checkbox" data-city="${p}" value="${c}" ${(checked ? checked.includes(c) : !nd) ? 'checked' : ''}> ${cnameAll(c)} · 🚗 ${hm(t)}${nd ? ' · (אין טיסות ישירות)' : ''}</label>`; }).join('')}</div></details>`;
 }
 const hav = (a, b, c, d) => { const R = 6371, r = Math.PI / 180, x = Math.sin((c - a) * r / 2) ** 2 + Math.cos(a * r) * Math.cos(c * r) * Math.sin((d - b) * r / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(x)); };
-async function destCompute(p, lat, lon, name) {
+async function destCompute(p, lat, lon, name, nd) {
   const hours = +$(`#${p}DH`).value, m = $(`#${p}DMsg`);
   m.className = 'msg'; m.textContent = '🚗 מחשב זמני נסיעה…';
   const cand = Object.entries(AIRP).filter(([, a]) => hav(lat, lon, a[1], a[2]) <= 8 * 110 + 50);
@@ -338,10 +374,11 @@ async function destCompute(p, lat, lon, name) {
     cand.forEach(([c], i) => { const t = r.durations[0][i + 1]; if (t != null) drive[c] = Math.round(t); });
     var snap = r.sources && r.sources[0] && r.sources[0].distance;
   }
-  DEST[p] = { name, lat, lon, hours, drive, img: await placeImg(name) };
+  DEST[p] = { name, lat, lon, hours, drive, img: await placeImg(name), he: (DEST[p] && DEST[p].name === name && DEST[p].he) || await placeHe(name, nd) };
   $(`#${p}Chips`).style.display = 'none';
   document.querySelectorAll(`#${p}Chips input`).forEach((x) => (x.checked = false));
   $(`#${p}DAir`).innerHTML = destList(p);
+  $(`#${p}DHeRow`).style.display = ''; $(`#${p}DHe`).value = DEST[p].he || '';
   const n = Object.values(drive).filter((t) => t <= hours * 3600).length;
   m.className = 'msg ok'; m.textContent = `✓ ${name}: נמצאו ${n} שדות תעופה עד ${hours} שעות נסיעה. אפשר לפתוח את הרשימה ולהוריד סימון.`;
   if (typeof snap === 'number' && snap > 2000) { m.className = 'msg err'; m.textContent += ` ⚠️ הנקודה רחוקה ${Math.round(snap / 1000)} ק״מ מהכביש הקרוב — אולי נבחר מקום לא מדויק. כדאי לנסות שם אחר או קישור מגוגל מפות.`; }
@@ -357,7 +394,7 @@ async function destFind(p) {
   }
   if (/goo\.gl|maps\.app/.test(q)) { m.className = 'msg err'; m.textContent = 'זה קישור מקוצר. פותחים אותו, ומעתיקים את הכתובת המלאה משורת הכתובת של הדפדפן.'; return; }
   m.className = 'msg'; m.textContent = '🔎 מחפש…';
-  let res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=8&accept-language=he&q=${encodeURIComponent(q)}`).then((x) => x.json()).catch(() => null);
+  let res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=8&namedetails=1&accept-language=he&q=${encodeURIComponent(q)}`).then((x) => x.json()).catch(() => null);
   // עדיפות ליישוב עצמו (כפר/עיר) על פני "גבול שטח" של מועצה — שמרכזו יכול להיות בהרים, רחוק מכביש
   if (res) {
     const rank = (x) => (x.class === 'place' || ['city', 'town', 'village', 'hamlet', 'suburb'].includes(x.addresstype) && x.class !== 'boundary') ? 0 : x.class === 'boundary' ? 2 : 1;
@@ -366,13 +403,15 @@ async function destFind(p) {
     res = res.filter((x) => { const k = x.display_name; if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 5);
   }
   if (!res || !res.length) { m.className = 'msg err'; m.textContent = 'לא מצאתי מקום כזה. נסו לכתוב באנגלית, או להדביק קישור מגוגל מפות.'; return; }
-  if (res.length === 1) return destCompute(p, +res[0].lat, +res[0].lon, res[0].display_name.split(',')[0]);
-  m.className = 'msg'; m.innerHTML = 'איזה מהם? ' + res.map((x, i) => `<button type="button" data-dpick="${p}" data-lat="${x.lat}" data-lon="${x.lon}" data-nm="${x.display_name.split(',')[0].replace(/"/g, '')}" style="margin:4px">${x.display_name.split(',').slice(0, 3).join(',')}</button>`).join('');
+  const nmOf = (x) => (x.namedetails && (x.namedetails['name:en'] || x.namedetails.name)) || x.display_name.split(',')[0];
+  if (res.length === 1) return destCompute(p, +res[0].lat, +res[0].lon, nmOf(res[0]), res[0].namedetails);
+  P_ND[p] = res;
+  m.className = 'msg'; m.innerHTML = 'איזה מהם? ' + res.map((x, i) => `<button type="button" data-dpick="${p}" data-lat="${x.lat}" data-lon="${x.lon}" data-nm="${nmOf(x).replace(/"/g, '')}" data-i="${i}" style="margin:4px">${x.display_name.split(',').slice(0, 3).join(',')}</button>`).join('');
 }
 document.addEventListener('click', (e) => {
   const f = e.target.closest('[data-dfind]'); if (f) return destFind(f.dataset.dfind);
-  const k = e.target.closest('[data-dpick]'); if (k) return destCompute(k.dataset.dpick, +k.dataset.lat, +k.dataset.lon, k.dataset.nm);
-  const c = e.target.closest('[data-dclear]'); if (c) { const p = c.dataset.dclear; delete DEST[p]; $(`#${p}DAir`).innerHTML = ''; $(`#${p}DQ`).value = ''; $(`#${p}Chips`).style.display = ''; $(`#${p}DMsg`).textContent = ''; c.remove(); }
+  const k = e.target.closest('[data-dpick]'); if (k) return destCompute(k.dataset.dpick, +k.dataset.lat, +k.dataset.lon, k.dataset.nm, ((P_ND[k.dataset.dpick] || [])[+k.dataset.i] || {}).namedetails);
+  const c = e.target.closest('[data-dclear]'); if (c) { const p = c.dataset.dclear; delete DEST[p]; if ($(`#${p}DHeRow`)) $(`#${p}DHeRow`).style.display = 'none'; $(`#${p}DAir`).innerHTML = ''; $(`#${p}DQ`).value = ''; $(`#${p}Chips`).style.display = ''; $(`#${p}DMsg`).textContent = ''; c.remove(); }
 });
 document.addEventListener('change', (e) => { const h = e.target.closest('[id$="DH"]'); if (h) { const p = h.id.slice(0, -2); if (DEST[p]) { DEST[p].hours = +h.value; $(`#${p}DAir`).innerHTML = destList(p); } } });
 document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.id && e.target.id.endsWith('DQ')) { e.preventDefault(); destFind(e.target.id.slice(0, -2)); } });
@@ -444,7 +483,7 @@ function readTrip(p) {
     airlines: [...document.querySelectorAll(`[data-air="${p}"]:checked`)].map((x) => x.value), noShabbat: $(`#${p}NoSh`).checked,
     pax: { adults: +$(`#${p}PA`).value, children: +$(`#${p}PC`).value, infants: +$(`#${p}PI`).value },
     cities: [...new Set([...document.querySelectorAll(DEST[p] ? `#${p}DAir [data-city="${p}"]:checked` : `#${p}Chips [data-city="${p}"]:checked`)].map((x) => x.value))],
-    dest: DEST[p] ? { name: DEST[p].name, lat: DEST[p].lat, lon: DEST[p].lon, hours: DEST[p].hours, img: DEST[p].img || PIMG[DEST[p].name] || null } : null,
+    dest: DEST[p] ? { name: DEST[p].name, lat: DEST[p].lat, lon: DEST[p].lon, hours: DEST[p].hours, img: DEST[p].img || PIMG[DEST[p].name] || null, he: ($(`#${p}DHe`) && $(`#${p}DHe`).value.trim()) || DEST[p].he || '' } : null,
     drive: DEST[p] ? Object.fromEntries(Object.entries(DEST[p].drive).filter(([, t]) => t <= DEST[p].hours * 3600)) : null };
 }
 function checkTrip(t) {
@@ -526,7 +565,7 @@ function card(w, can) {
     <div class="photo" style="background-image:url(${w.dest && (w.dest.img || PIMG[w.dest.name]) ? (w.dest.img || PIMG[w.dest.name]) : `img/${img}.jpg`})">
       ${hit ? '<div class="ribbon">✅ מתחת ליעד!</div>' : ''}
       <div class="cap">${w.dest
-        ? `<div class="city">🎯 ${w.dest.name}</div><div class="air">✈️ הכי זול: ${cname(cityNow)}${dr(cityNow)}${many ? ` · מבין ${citiesOfW(w).length} שדות` : ''} · ${air} · 🎫 ${paxText(px)}</div>`
+        ? `<div class="city">🎯 ${destLabel(w.dest)}</div><div class="air">✈️ הכי זול: ${cname(cityNow)}${dr(cityNow)}${many ? ` · מבין ${citiesOfW(w).length} שדות` : ''} · ${air} · 🎫 ${paxText(px)}</div>`
         : `<div class="city">${cname(cityNow)}${many ? `<span style="font-size:15px;font-weight:600"> · הכי זול מבין ${citiesOfW(w).length} יעדים</span>` : ''}</div><div class="air">${air} · 🎫 ${paxText(px)}</div>`}</div>
     </div>
     <div class="cb">

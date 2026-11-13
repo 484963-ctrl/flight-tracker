@@ -482,7 +482,7 @@ function saveChannelStatus() {
     if (!st0.firstDone && (price != null || wOut[w.id].none)) {
       st0.firstDone = now.toISOString();
       const pn = paxCount(paxOf(w));
-      const L = [`✅ הבדיקה הראשונה הסתיימה: ${w.dest ? '🎯 ' + w.dest.name : CITY(w.city)}`];
+      const L = [`✅ הבדיקה הראשונה הסתיימה: ${w.dest ? '🎯 ' + (w.dest.he && w.dest.he !== w.dest.name ? `${w.dest.he} - ${w.dest.name}` : w.dest.name) : CITY(w.city)}`];
       if (price == null) L.push('לא נמצאה טיסה ישירה שמתאימה להגדרות שלך בתאריכים האלה.');
       else {
         L.push(`הכי זול: ${CITY(w.city)} — ${ils(price)}${pn > 1 ? ` לכל ${pn} הנוסעים (${ils(Math.round(price / pn))} לנוסע)` : ''}`);
