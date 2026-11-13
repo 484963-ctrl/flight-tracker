@@ -616,6 +616,17 @@ function saveChannelStatus() {
   // התראות — כל משתמש מקבל רק על הטיולים שלו
   for (const owner of [...new Set(alerts.map((x) => x.w.owner || null))])
     await sendTo(owner, message(alerts.filter((x) => (x.w.owner || null) === owner), ownerName(owner)));
+  // משתמש חדש: הודעה למנהל, וברכה למשתמש (פעם אחת, כשיש לו ערוץ)
+  if (USERS) {
+    const known = (sys.users = sys.users || {});
+    const first = !Object.keys(known).length; // בהפעלה הראשונה — רק זוכרים את מי שכבר קיים
+    for (const [id, u] of Object.entries(USERS)) {
+      const k = (known[id] = known[id] || {});
+      if (!k.seen) { k.seen = now.toISOString(); if (!first && !u.admin) note(null, `👤 הצטרף משתמש חדש: ${u.name || '(עוד בלי שם)'}${u.whatsapp ? ` · ${u.whatsapp}` : ''}. אפשר לראות ולחסום ב"🛠️ משתמשים" באתר.`); if (first || u.admin) k.welcomed = true; }
+      if (!k.welcomed && (u.whatsapp || u.tg_chat)) { k.welcomed = now.toISOString();
+        await sendTo(id, `${hello([], u.name)}\nברוך הבא למעקב הטיסות! ✈️\nכאן תקבל התראה על כל ירידה במחיר של הטיולים שלך, וסיכום כל בוקר ב-8:00.${footer()}`); }
+    }
+  }
   await sendNotes(notes);
   // "שלח הודעת בדיקה" מהאתר — לכל משתמש לפי הבקשה שלו
   const tested = new Set(alerts.map((x) => x.w.owner || null));
