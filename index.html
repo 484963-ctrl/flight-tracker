@@ -107,6 +107,8 @@
   td.best { background:var(--gold); font-weight:800; }
   .sat td { color:#aaa; }
   .small { font-size:12px; color:var(--mute); display:block; }
+  a.btn { display:inline-block; margin-top:6px; padding:8px 14px; border-radius:10px; background:#2aabee; color:#fff; font-weight:700; text-decoration:none; }
+  #admList table { width:100%; border-collapse:collapse; font-size:14px; } #admList td, #admList th { padding:6px; border-bottom:1px solid #eee; text-align:right; }
   .tf { display:grid; gap:12px; }
   .tf label { display:flex; flex-direction:column; gap:5px; font-size:14px; color:var(--mute); font-weight:500; }
   .tf input, .tf select { font:inherit; font-size:16px; padding:9px 11px; border:1.5px solid #d3dae8; border-radius:12px; background:#fff; color:var(--ink); }
@@ -142,7 +144,7 @@
 </head>
 <body>
 <section class="hero">
-  <div class="top"><button id="btnKey" class="glass">🔑 כניסה לעריכה</button></div>
+  <div class="top"><button id="btnKey" class="glass">👤 כניסה</button></div>
   <div class="in">
     <h1>✈️ הטיולים שלי</h1>
     <div class="tag">מעקב מחירי טיסות ישירות מתל אביב · התראה על כל ירידה</div>
@@ -153,13 +155,26 @@
 <div class="wrap">
 
   <div class="box" id="keyBox" style="display:none">
-    <b style="font-size:18px">🔑 כניסה לעריכה</b>
-    <div class="form" style="margin-top:10px">
-      <label>הקוד שלך<input id="tok" type="password" autocomplete="current-password" style="width:200px"></label>
-      <button class="pri" id="saveTok">כניסה</button>
-      <button id="delTok">יציאה</button>
+    <div id="authOut">
+      <b style="font-size:18px">👤 כניסה לחשבון</b>
+      <div class="note" style="margin-top:2px">כל אחד רואה ועורך רק את הטיולים שלו, ומקבל התראות לטלגרם ולוואטסאפ שלו.</div>
+      <div class="form" style="margin-top:10px">
+        <label>מייל<input id="aEmail" type="email" autocomplete="username" style="width:230px" dir="ltr"></label>
+        <label>סיסמה<input id="aPass" type="password" autocomplete="current-password" style="width:170px" dir="ltr"></label>
+        <button class="pri" id="aIn">כניסה</button>
+        <button id="aUp">הרשמה (חשבון חדש)</button>
+        <button id="aForgot" style="background:none;border:0;color:var(--mute);text-decoration:underline">שכחתי סיסמה</button>
+      </div>
+    </div>
+    <div id="authNewPass" style="display:none">
+      <b style="font-size:18px">🔑 סיסמה חדשה</b>
+      <div class="form" style="margin-top:10px"><label>סיסמה חדשה (6 תווים לפחות)<input id="aNew" type="password" autocomplete="new-password" style="width:200px" dir="ltr"></label><button class="pri" id="aNewSave">שמירה</button></div>
     </div>
     <div class="msg" id="tokMsg"></div>
+  </div>
+
+  <div class="box" id="waitBox" style="display:none;background:#fff8e6;border-color:#f3d48b">
+    ⏳ <b>החשבון ממתין לאישור.</b> אפשר כבר להוסיף טיולים — הם נשמרים, והבדיקות וההתראות יתחילו אחרי שהמנהל יאשר.
   </div>
 
   <div class="sec">🧳 הטיולים שלי במעקב</div>
@@ -173,14 +188,24 @@
   </div>
 
   <div class="box" id="chBox">
-    <b style="font-size:18px">📨 איפה לקבל התראות</b>
-    <div class="note" style="margin-top:2px">מסמנים את הערוצים הרצויים. ההודעות: סיכום כל בוקר, וכל ירידה במחיר.</div>
+    <b style="font-size:18px">👤 החשבון שלי · איפה לקבל התראות</b>
+    <div class="note" style="margin-top:2px">ההודעות: התראה על כל ירידה במחיר, וסיכום כל בוקר.</div>
+    <div class="form" style="margin-top:10px">
+      <label>השם שלי (לברכה בהודעות)<input id="pName" maxlength="40" style="width:200px" placeholder="למשל: משפחת כהן"></label>
+      <label>מספר וואטסאפ<input id="pWa" style="width:170px" dir="ltr" placeholder="050-1234567"></label>
+      <button id="pSave">שמירה</button>
+    </div>
     <div class="chans" id="chans"></div>
     <div class="form" style="margin-top:10px"><button id="chTest">📨 לשלוח הודעת בדיקה</button></div>
     <div class="msg" id="chMsg"></div>
+    <div class="note" id="acctLine" style="margin-top:10px"></div>
   </div>
 
-
+  <div class="box" id="admBox" style="display:none">
+    <b style="font-size:18px">🛠️ משתמשים (רק למנהל)</b>
+    <div id="admList" style="margin-top:8px"></div>
+    <div class="msg" id="admMsg"></div>
+  </div>
 
   <details class="box" id="ovBox">
     <summary>📅 כל התאריכים — לעזרה בבחירת תאריכים (מתעדכן פעם ביום)</summary>
@@ -194,6 +219,7 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 const $ = (s) => document.querySelector(s);
 const DAY = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','שבת'];
@@ -208,13 +234,12 @@ const ago = (t) => { const m = Math.round((Date.now() - new Date(t)) / 6e4); ret
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const ltr = (s) => `<bdi dir="ltr">${s}</bdi>`;
 
-// --- הטיולים נשמרים במסד (Supabase); הכניסה לעריכה בקוד ---
-const CODEKEY = 'flights-code';
-const code = () => { try { return localStorage.getItem(CODEKEY) || ''; } catch { return ''; } };
-const setCode = (v) => { try { v ? localStorage.setItem(CODEKEY, v) : localStorage.removeItem(CODEKEY); } catch {} };
+// --- חשבונות (Supabase Auth): כל משתמש — הטיולים, ההגדרות והפרופיל שלו ---
+let SB = null, ME = null;
+const token = async () => { if (!SB) return null; const { data } = await SB.auth.getSession(); return data.session ? data.session.access_token : null; };
 async function rpc(fn, body) {
-  const sb = CFG.supabase;
-  const r = await fetch(`${sb.url}/rest/v1/rpc/${fn}`, { method: 'POST', headers: { apikey: sb.key, 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+  const sb = CFG.supabase, t = await token();
+  const r = await fetch(`${sb.url}/rest/v1/rpc/${fn}`, { method: 'POST', headers: { apikey: sb.key, 'Content-Type': 'application/json', ...(t ? { Authorization: 'Bearer ' + t } : {}) }, body: JSON.stringify(body || {}) });
   if (!r.ok) throw new Error('אין חיבור לשרת, נסו שוב (' + r.status + ')');
   return r.json();
 }
@@ -225,8 +250,8 @@ async function getFile(p, fallback) {
 }
 
 async function saveWatches(list) {
-  const ok = await rpc('flight_save_watches', { pass: code(), data: list });
-  if (!ok) { setCode(''); render(); throw new Error('הקוד לא נכון — צריך להיכנס שוב'); }
+  const ok = await rpc('ft_save_watches', { data: list });
+  if (!ok) throw new Error('לא נשמר — צריך להיכנס שוב לחשבון');
   W = list;
   pending = Date.now();
   render();
@@ -237,8 +262,13 @@ let CFG = {}, W = [], L = {}, WH = {}, pending = 0, ovCity = null, confirmDel = 
 
 async function load() {
   [CFG, L, WH] = await Promise.all([getFile('config.json', {}), getFile('data/latest.json', {}), getFile('data/watch-history.json', {})]);
-  try { W = CFG.supabase ? await rpc('flight_get_watches') : await getFile('watches.json', []); } catch { W = await getFile('watches.json', []); }
-  try { SET = (CFG.supabase && await rpc('flight_get_settings')) || {}; } catch { SET = {}; }
+  if (!SB && CFG.supabase && window.supabase) {
+    SB = window.supabase.createClient(CFG.supabase.url, CFG.supabase.key);
+    SB.auth.onAuthStateChange((ev) => { if (ev === 'PASSWORD_RECOVERY') { $('#keyBox').style.display = ''; $('#authOut').style.display = 'none'; $('#authNewPass').style.display = ''; } });
+  }
+  try { ME = (await token()) ? await rpc('ft_me') : null; } catch { ME = null; }
+  W = ME ? (ME.watches || []) : [];
+  SET = ME ? (ME.settings || {}) : {};
   CH = await getFile('data/channels.json', {});
   if (!Object.keys(AIRP).length) AIRP = await getFile('airports.json', {});
   if (pending && L.updated && new Date(L.updated) > pending) pending = 0;
@@ -246,15 +276,20 @@ async function load() {
 }
 
 function render() {
-  const can = !!code();
-  $('#btnKey').textContent = can ? '✓ במצב עריכה' : '🔑 כניסה לעריכה';
+  const can = !!ME && !ME.blocked;
+  $('#btnKey').textContent = ME ? '👤 ' + (ME.name || ME.email) : '👤 כניסה / הרשמה';
+  if (!ME && !$('#authNewPass').offsetParent) $('#keyBox').style.display = '';
   $('#addBox').style.display = can ? '' : 'none';
+  $('#chBox').style.display = ME ? '' : 'none';
+  $('#waitBox').style.display = ME && !ME.approved ? '' : 'none';
+  $('#admBox').style.display = ME && ME.admin ? '' : 'none';
+  if (ME && ME.admin) renderAdmin();
   $('#upd').innerHTML = (L.updated ? `🕒 בדיקה אחרונה: ${ago(L.updated)} · ${new Date(L.updated).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}` : 'עוד אין בדיקות')
     + ' · נבדק כל חצי שעה' + (L.fx && L.fx.rate ? ` · 💵 דולר: ₪${L.fx.rate.toFixed(3)} (${L.fx.src || ''}${L.fx.t ? ', ' + new Date(L.fx.t).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''})` : '');
   if (!$('#fForm').innerHTML && CFG.cities) { $('#fForm').innerHTML = tripForm('f'); bindAddForm(); }
 
   const cards = W.map((w) => card(w, can)).join('');
-  $('#cards').innerHTML = cards || `<div class="box empty">עוד אין טיולים במעקב. ${can ? 'מוסיפים טיול למעלה.' : 'לוחצים "🔑 חיבור לעריכה" כדי להוסיף.'}</div>`;
+  $('#cards').innerHTML = cards || `<div class="box empty">${ME ? 'עוד אין טיולים במעקב. מוסיפים טיול למטה.' : 'נכנסים לחשבון (או נרשמים) כדי לראות ולהוסיף טיולים.'}</div>`;
   bindCards();
   renderStats();
   // תמונות של מקומות שעוד לא נטענו
@@ -673,16 +708,28 @@ const CHN = {
   whatsapp: { name: '💬 וואטסאפ', how: `<b>דרך TextMeBot:</b><br>1. ב-<a href="https://textmebot.com/" target="_blank">textmebot.com</a> לוחצים "בקשת ApiKey" ומקבלים מפתח במייל.<br>2. לפי הקישור במייל מחברים וואטסאפ (סריקת קוד).<br>3. <a href="${SECRETS}" target="_blank">כאן</a> שומרים <code>TEXTMEBOT_APIKEY</code> (המפתח), ו-<code>WHATSAPP_TO</code> — המספר שמקבל את ההודעות (למשל <bdi dir="ltr">+972501234567</bdi>; כמה מספרים — מפרידים בפסיק).<br>עדיף שהמספר שמקבל יהיה אחר מהמספר שחובר — אחרת ההודעה נכנסת ל"הודעה לעצמי" ולא מצלצלת.` },
   email: { name: '📧 מייל', how: `1. ב-Gmail צריך אימות דו-שלבי, ואז <a href="https://myaccount.google.com/apppasswords" target="_blank">סיסמת אפליקציה</a> (16 אותיות).<br>2. <a href="${SECRETS}" target="_blank">כאן</a> שומרים <code>MAIL_USER</code> (כתובת ה-Gmail) ו-<code>MAIL_PASS</code> (סיסמת האפליקציה).<br>3. רשות: <code>MAIL_TO</code> — לשלוח לכתובת אחרת.` },
 };
+const BOT = 'moshe_flights_bot';
 function renderChannels(can) {
+  if (!ME) return;
   const ch = (SET.channels) || { telegram: true, whatsapp: true, email: true };
-  $('#chans').innerHTML = Object.entries(CHN).map(([k, c]) => {
-    const st = CH[k] || {}, on = ch[k] !== false, last = st.last;
-    const stat = !st.configured
-      ? `<div class="st no">✗ עוד לא מחובר</div><details><summary>איך מחברים?</summary>${c.how}</details>`
-      : `<div class="st ok">✓ מחובר${last ? ` · הודעה אחרונה ${ago(last.t)}${last.ok ? '' : ' — <span style="color:var(--red)">נכשלה</span>'}` : ''}</div>`;
-    return `<div class="chan ${on && st.configured ? 'on' : ''}">
+  if (document.activeElement !== $('#pName')) $('#pName').value = ME.name || '';
+  if (document.activeElement !== $('#pWa')) $('#pWa').value = ME.whatsapp || '';
+  // המנהל — הערוצים שמוגדרים ב-GitHub; משתמש — הטלגרם והוואטסאפ שלו
+  const conf = ME.admin ? { telegram: !!(CH.telegram || {}).configured, whatsapp: !!(CH.whatsapp || {}).configured, email: !!(CH.email || {}).configured }
+    : { telegram: !!ME.tg, whatsapp: !!ME.whatsapp };
+  const tgLink = `https://t.me/${BOT}?start=${ME.tg_code}`;
+  const how = { telegram: `<a class="btn" href="${tgLink}" target="_blank">✈️ לחבר את הטלגרם שלי</a><div class="small">נפתח הבוט — לוחצים <b>Start</b> (התחלה). תוך דקה־שתיים יגיע אישור.</div>`,
+    whatsapp: 'כותבים למעלה את מספר הוואטסאפ ולוחצים "שמירה". כדאי לשמור באנשי הקשר את המספר שממנו נשלחות ההודעות: <bdi dir="ltr">053-821-3964</bdi>, ולשלוח לו "שלום".',
+    email: 'רק למנהל, דרך GitHub.' };
+  $('#chans').innerHTML = Object.entries(CHN).filter(([k]) => ME.admin || k !== 'email').map(([k, c]) => {
+    const on = ch[k] !== false, st = ME.admin ? (CH[k] || {}) : {}, last = st.last;
+    const stat = !conf[k] ? `<div class="st no">✗ עוד לא מחובר</div><div class="small" style="margin-top:4px">${ME.admin ? `<details><summary>איך מחברים?</summary>${c.how}</details>` : how[k]}</div>`
+      : `<div class="st ok">✓ מחובר${k === 'whatsapp' && !ME.admin ? ` · <bdi dir="ltr">${esc(ME.whatsapp)}</bdi>` : ''}${last ? ` · הודעה אחרונה ${ago(last.t)}${last.ok ? '' : ' — <span style="color:var(--red)">נכשלה</span>'}` : ''}</div>${k === 'telegram' && !ME.admin ? `<div class="small"><a href="${tgLink}" target="_blank">לחבר מחדש</a></div>` : ''}`;
+    return `<div class="chan ${on && conf[k] ? 'on' : ''}">
       <label class="tg"><input type="checkbox" data-ch="${k}" ${on ? 'checked' : ''} ${can ? '' : 'disabled'}> ${c.name}</label>${stat}</div>`;
   }).join('');
+  $('#acctLine').innerHTML = `מחובר כ-<bdi dir="ltr">${esc(ME.email)}</bdi> · <a href="#" id="aOut">יציאה מהחשבון</a>`;
+  $('#aOut').onclick = async (e) => { e.preventDefault(); await SB.auth.signOut(); ME = null; W = []; location.reload(); };
   $('#chTest').style.display = can ? '' : 'none';
   document.querySelectorAll('[data-ch]').forEach((b) => b.onchange = async () => {
     const channels = { ...ch, [b.dataset.ch]: b.checked };
@@ -692,9 +739,29 @@ function renderChannels(can) {
     catch (e) { b.checked = !b.checked; m.className = 'msg err'; m.textContent = e.message; }
   });
 }
+$('#pSave').onclick = async () => {
+  const m = $('#chMsg');
+  try {
+    if (!(await rpc('ft_save_profile', { p_name: $('#pName').value.trim(), p_whatsapp: $('#pWa').value.trim() }))) throw new Error('המספר לא נראה תקין. כותבים למשל 050-1234567.');
+    m.className = 'msg ok'; m.textContent = '✓ נשמר.'; await load();
+  } catch (e) { m.className = 'msg err'; m.textContent = e.message; }
+};
+// --- ניהול משתמשים (מנהל) ---
+let ADM = null;
+async function renderAdmin(force) {
+  if (!ADM || force) { try { ADM = await rpc('ft_admin_list'); } catch { ADM = []; } }
+  $('#admList').innerHTML = !ADM.length ? '<div class="note">עוד אין משתמשים.</div>' : `<table><tr><th>משתמש</th><th>טיולים</th><th>טלגרם</th><th>וואטסאפ</th><th>מצב</th><th></th></tr>${ADM.map((u) => `<tr>
+    <td>${esc(u.name || '—')}<span class="small"><bdi dir="ltr">${esc(u.email || '')}</bdi></span></td><td>${u.trips}</td><td>${u.tg ? '✓' : '—'}</td><td>${u.whatsapp ? `<bdi dir="ltr">${esc(u.whatsapp)}</bdi>` : '—'}</td>
+    <td>${u.admin ? '⭐ מנהל' : u.blocked ? '⛔ חסום' : u.approved ? '✅ מאושר' : '⏳ ממתין'}</td>
+    <td>${u.admin ? '' : `${!u.approved || u.blocked ? `<button data-adm="${u.id}" data-a="1" data-b="0">✅ אישור</button>` : ''} ${!u.blocked ? `<button data-adm="${u.id}" data-a="${u.approved ? 1 : 0}" data-b="1">⛔ חסימה</button>` : ''}`}</td></tr>`).join('')}</table>`;
+  document.querySelectorAll('[data-adm]').forEach((b) => b.onclick = async () => {
+    const ok = await rpc('ft_admin_set', { p_uid: b.dataset.adm, p_approved: b.dataset.a === '1', p_blocked: b.dataset.b === '1' }).catch(() => false);
+    $('#admMsg').className = 'msg ' + (ok ? 'ok' : 'err'); $('#admMsg').textContent = ok ? '✓ עודכן.' : 'לא עודכן.'; renderAdmin(true);
+  });
+}
 async function saveSettings(next) {
-  const ok = await rpc('flight_save_settings', { pass: code(), data: next });
-  if (!ok) { setCode(''); render(); throw new Error('הקוד לא נכון — צריך להיכנס שוב'); }
+  const ok = await rpc('ft_save_settings', { data: next });
+  if (!ok) throw new Error('לא נשמר — צריך להיכנס שוב לחשבון');
   SET = next; render();
 }
 $('#chTest').onclick = async () => {
@@ -751,18 +818,35 @@ $('#fAdd').onclick = async () => {
 };
 function bindAddForm() {} // מילוי אוטומטי של התאריכים — ב-addEventListener('change') של החלונות
 
-// --- כניסה בקוד ---
-$('#btnKey').onclick = () => { const b = $('#keyBox'); b.style.display = b.style.display === 'none' ? '' : 'none'; };
-$('#saveTok').onclick = async () => {
-  const v = $('#tok').value.trim(), m = $('#tokMsg');
-  try {
-    if (!(await rpc('flight_check_pass', { pass: v }))) { m.className = 'msg err'; m.textContent = 'הקוד לא נכון.'; return; }
-    setCode(v); $('#tok').value = ''; m.className = 'msg ok'; m.textContent = '✓ נכנסת. אפשר להוסיף ולשנות טיולים.';
-    $('#keyBox').style.display = 'none'; render();
-  } catch (e) { m.className = 'msg err'; m.textContent = e.message; }
+// --- כניסה לחשבון ---
+$('#btnKey').onclick = () => { const b = $('#keyBox'); if (ME) { $('#chBox').scrollIntoView({ behavior: 'smooth' }); return; } b.style.display = b.style.display === 'none' ? '' : 'none'; };
+const aMsg = (t, ok) => { const m = $('#tokMsg'); m.className = 'msg ' + (ok ? 'ok' : 'err'); m.textContent = t; };
+const heErr = (e) => /Invalid login/i.test(e.message) ? 'המייל או הסיסמה לא נכונים.' : /already registered|already been registered/i.test(e.message) ? 'המייל הזה כבר רשום — לוחצים "כניסה".'
+  : /Password should|at least/i.test(e.message) ? 'הסיסמה צריכה להיות 6 תווים לפחות.' : /valid email|invalid format/i.test(e.message) ? 'המייל לא נראה תקין.' : /rate limit|security purposes/i.test(e.message) ? 'יותר מדי ניסיונות — מחכים דקה ומנסים שוב.' : e.message;
+async function afterLogin() { $('#aPass').value = ''; $('#keyBox').style.display = 'none'; aMsg('', true); await load(); }
+$('#aIn').onclick = async () => {
+  const { error } = await SB.auth.signInWithPassword({ email: $('#aEmail').value.trim(), password: $('#aPass').value });
+  if (error) return aMsg(heErr(error)); afterLogin();
 };
-$('#tok').onkeydown = (e) => { if (e.key === 'Enter') $('#saveTok').click(); };
-$('#delTok').onclick = () => { setCode(''); $('#tokMsg').textContent = 'יצאת ממצב עריכה.'; render(); };
+$('#aPass').onkeydown = (e) => { if (e.key === 'Enter') $('#aIn').click(); };
+$('#aUp').onclick = async () => {
+  const email = $('#aEmail').value.trim(), password = $('#aPass').value;
+  if (!email || password.length < 6) return aMsg('כותבים מייל וסיסמה (6 תווים לפחות), ואז "הרשמה".');
+  const { data, error } = await SB.auth.signUp({ email, password, options: { data: { app: 'flights' }, emailRedirectTo: location.origin + location.pathname } });
+  if (error) return aMsg(heErr(error));
+  if (!data.session) { const r = await SB.auth.signInWithPassword({ email, password }); if (r.error) return aMsg(heErr(r.error)); }
+  afterLogin();
+};
+$('#aForgot').onclick = async () => {
+  const email = $('#aEmail').value.trim(); if (!email) return aMsg('כותבים קודם את המייל, ואז "שכחתי סיסמה".');
+  const { error } = await SB.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  error ? aMsg(heErr(error)) : aMsg('✓ נשלח מייל עם קישור לסיסמה חדשה.', true);
+};
+$('#aNewSave').onclick = async () => {
+  const { error } = await SB.auth.updateUser({ password: $('#aNew').value });
+  if (error) return aMsg(heErr(error));
+  $('#authNewPass').style.display = 'none'; $('#authOut').style.display = ''; aMsg('✓ הסיסמה הוחלפה.', true); afterLogin();
+};
 
 // גרסה חדשה של האתר? טוענים אותה לבד (בלי Ctrl+F5)
 async function checkNewVersion() {

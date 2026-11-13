@@ -51,7 +51,7 @@ jobs:
             # הגרסה הכי חדשה של הקוד והנתונים — שינויים נכנסים לעבודה בלי להפעיל מחדש
             git pull -q --rebase -X ours origin main || echo "git pull נכשל, ממשיכים עם מה שיש"
             npm install --no-audit --no-fund --silent || true   # אם נוספה ספרייה חדשה
-            sig() { node -e 'const c=require("./config.json").supabase;Promise.all(["flight_get_watches","flight_get_settings"].map(f=>fetch(c.url+"/rest/v1/rpc/"+f,{method:"POST",headers:{apikey:c.key,"Content-Type":"application/json"},body:"{}"}).then(r=>r.text()))).then(a=>console.log(require("crypto").createHash("sha1").update(a.join("|")).digest("hex"))).catch(()=>console.log("x"))'; }
+            sig() { node sig.js 2>/dev/null || echo x; }
             # מצב האתר לפני הבדיקה — שינוי שנעשה בזמן הבדיקה ייתפס מיד אחריה
             last=$(sig)
             TEST_NOTIFY=$([ -n "$first" ] && echo "$FIRST_TEST") node scan.js || echo "הבדיקה נכשלה, ממשיכים"
@@ -65,6 +65,7 @@ jobs:
             # מחכים חצי שעה — אבל בודקים כל דקה אם הוסיפו/שינו טיול באתר (או ביקשו הודעת בדיקה), ואז בודקים מיד
             for i in $(seq 1 30); do
               sleep 60
+              node tglink.js || true   # חיבור טלגרם של משתמשים חדשים
               now=$(sig)
               if [ "$now" != "x" ] && [ "$last" != "x" ] && [ "$now" != "$last" ]; then
                 # שינוי באתר: בדיקה מהירה רק של הטיולים החדשים/ששונו, ואז ממשיכים לחכות לבדיקה המלאה

@@ -12,7 +12,7 @@ const wr = (f, v) => fs.writeFileSync(path.join(ROOT, f), JSON.stringify(v));
 fs.mkdirSync(DATA, { recursive: true });
 
 const cfg = rd('config.json', {});
-let watches = rd('watches.json', []); // נטען מחדש מהמסד בתחילת הריצה (ומנורמל אחרי שהפונקציות מוגדרות)
+let watches = rd('.cache-watches.json', rd('watches.json', [])); // נטען מחדש מהמסד בתחילת הריצה (ומנורמל אחרי שהפונקציות מוגדרות)
 const AIRPORTS = rd('airports.json', {}); // שם, קו רוחב, קו אורך, אזור זמן — לבחירה לפי נקודת יעד
 const CITY = (c) => cfg.cities[c] || (AIRPORTS[c] && AIRPORTS[c][0]) || c;
 const AIR = { elal: 'El Al' };
@@ -257,14 +257,43 @@ async function rtSearch(ctx, o, b, from, to, pax, okOut, okBack) {
 
 let settings = {};
 // הטיולים נשמרים במסד (Supabase) — מה שהוגדר באתר
+// משתמשים (כמה חשבונות): uid ← { name, whatsapp, tg_chat, settings, admin }. null = מצב ישן, משתמש אחד
+let USERS = null;
+const SCAN_KEY = process.env.TEXTMEBOT_APIKEY ? 'flights-scan:' + process.env.TEXTMEBOT_APIKEY : '';
+const ownerName = (owner) => (owner && USERS && USERS[owner] && USERS[owner].name) || '';
+const adminId = () => (USERS && Object.keys(USERS).find((id) => USERS[id].admin)) || null;
+// שליחה למשתמש: המנהל (או מצב ישן) — לערוצים שב-GitHub; משתמש אחר — לטלגרם ולוואטסאפ שלו
+async function sendTo(owner, text) {
+  const u = owner && USERS && USERS[owner];
+  const channels = u ? (u.settings || {}).channels : undefined;
+  if (!u || u.admin) return notify.send(text, { channels });
+  return notify.send(text, { user: true, telegram: u.tg_chat || null, whatsapp: u.whatsapp || null, channels });
+}
+async function sendNotes(notes) {
+  for (const owner of [...new Set(notes.map((n) => n.owner))]) {
+    const target = owner == null ? adminId() : owner;
+    await sendTo(target, notes.filter((n) => n.owner === owner).map((n) => n.text).join('\n\n'));
+  }
+}
 async function loadWatches() {
   const sb = cfg.supabase;
   if (!sb) return;
+  if (SCAN_KEY) try {
+    const r = await fetch(`${sb.url}/rest/v1/rpc/ft_scan_get`, { method: 'POST', headers: { apikey: sb.key, 'Content-Type': 'application/json' }, body: JSON.stringify({ key: SCAN_KEY }) });
+    const us = r.ok ? await r.json() : null;
+    if (Array.isArray(us) && us.length) {
+      USERS = {}; const all = [];
+      for (const u of us) { USERS[u.id] = u; for (const w of u.watches || []) if (w && w.id) all.push({ ...w, owner: u.id }); }
+      watches = all; wr('.cache-watches.json', all);
+      console.log(`${us.length} משתמשים, ${all.length} טיולים`);
+      return;
+    }
+  } catch (e) { console.log('חשבונות: לא נטען —', e.message); }
   try {
     const r = await fetch(`${sb.url}/rest/v1/rpc/flight_get_watches`, { method: 'POST', headers: { apikey: sb.key, 'Content-Type': 'application/json' }, body: '{}' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const w = await r.json();
-    if (Array.isArray(w)) { watches = w.map(norm); wr('watches.json', w); }
+    if (Array.isArray(w)) { watches = w.map(norm); wr('.cache-watches.json', w); }
     // לאן לשלוח התראות — נבחר באתר
     const r2 = await fetch(`${sb.url}/rest/v1/rpc/flight_get_settings`, { method: 'POST', headers: { apikey: sb.key, 'Content-Type': 'application/json' }, body: '{}' });
     if (r2.ok) { const st = await r2.json(); if (st && st.channels) notify.setChannels(st.channels); settings = st || {}; }
@@ -312,7 +341,8 @@ function saveChannelStatus() {
   const wHist = rd('data/watch-history.json', {});
   const state = rd('data/state.json', {});
   const sys = (state._sys = state._sys || {});
-  const notes = []; // הודעות מערכת: פער בבדיקות, סיכום בוקר
+  const notes = []; // { owner, text } — owner null = מערכת (למנהל)
+  const note = (owner, text) => notes.push({ owner: owner || null, text });
   // בדיקה מהירה (ONLY_NEW): רק טיולים חדשים או ששונו — כדי שהתוצאה שלהם תגיע תוך כמה דקות
   const ONLY_NEW = !!process.env.ONLY_NEW;
   if (ONLY_NEW) {
@@ -323,7 +353,7 @@ function saveChannelStatus() {
   // הבדיקות נעצרו לזמן ארוך? מודיעים שחזרו לעבוד
   if (!ONLY_NEW && prev.updated && now - new Date(prev.updated) > 90 * 60e3 && sys.gapFor !== prev.updated) {
     const h = Math.round((now - new Date(prev.updated)) / 36e5 * 10) / 10;
-    notes.push(`⚠️ הבדיקות של המחירים לא רצו ${h} שעות (תקלה אצל GitHub). עכשיו הן חזרו לעבוד.`);
+    note(null, `⚠️ הבדיקות של המחירים לא רצו ${h} שעות (תקלה אצל GitHub). עכשיו הן חזרו לעבוד.`);
     sys.gapFor = prev.updated;
   }
 
@@ -379,12 +409,12 @@ function saveChannelStatus() {
   if (keys.length && okCount < keys.length * 0.3) {
     console.log(`רק ${okCount}/${keys.length} נטענו — לא שומרים`);
     sys.fails = (sys.fails || 0) + 1;
-    if (sys.fails === 3) notes.push('⚠️ שלוש בדיקות ברצף לא הצליחו לקרוא מחירים מגוגל. ממשיכים לנסות כל חצי שעה — אודיע כשזה יסתדר.');
+    if (sys.fails === 3) note(null, '⚠️ שלוש בדיקות ברצף לא הצליחו לקרוא מחירים מגוגל. ממשיכים לנסות כל חצי שעה — אודיע כשזה יסתדר.');
     wr('data/state.json', state);
-    if (notes.length) await notify.send(notes.join('\n\n'));
+    await sendNotes(notes);
     return;
   }
-  if (sys.fails >= 3) notes.push('✅ קריאת המחירים מגוגל חזרה לעבוד.');
+  if (sys.fails >= 3) note(null, '✅ קריאת המחירים מגוגל חזרה לעבוד.');
   sys.fails = 0;
 
   const alerts = [];
@@ -518,11 +548,11 @@ function saveChannelStatus() {
     if (!st0.firstDone && st0.last != null) st0.firstDone = 'before'; // טיול שכבר נבדק בעבר — בלי הודעה
     if (!st0.firstDone && (price != null || wOut[w.id].none)) {
       st0.firstDone = now.toISOString();
-      const L = [hello([w]), `✅ הבדיקה הראשונה הסתיימה${w.title ? `: 🧳 ${w.title}` : ''}`, ''];
+      const L = [hello([w], ownerName(w.owner)), `✅ הבדיקה הראשונה הסתיימה${w.title ? `: 🧳 ${w.title}` : ''}`, ''];
       if (price == null) L.push(`✈️ ${placeOf(w)}: לא נמצאה טיסה ישירה שמתאימה להגדרות שלך בתאריכים האלה.`);
       else L.push(tripBlock(w, wOut[w.id], { noTitle: true }));
       L.push('', 'מעכשיו: בדיקה כל חצי שעה, והודעה על כל ירידה.' + footer());
-      notes.push(L.join('\n'));
+      note(w.owner, L.join('\n'));
     }
     if (price == null) continue;
     const h = (wHist[w.id] = wHist[w.id] || []);
@@ -550,22 +580,26 @@ function saveChannelStatus() {
   const ilDate = `${il.find((x) => x.type === 'year').value}-${il.find((x) => x.type === 'month').value}-${il.find((x) => x.type === 'day').value}`;
   const ilHour = +il.find((x) => x.type === 'hour').value % 24;
   if (!ONLY_NEW && ilHour >= 8 && sys.daily !== ilDate && watches.length) {
-    const L = [`☀️ בוקר טוב${(() => { const n = [...new Set(watches.map((w) => w.who).filter(Boolean))]; return n.length === 1 ? ', ' + n[0] : ''; })()}! המחירים של הבוקר:`];
-    for (const w of watches) {
-      const r = wOut[w.id], pp = paxOf(w), pn = paxCount(pp);
-      L.push('');
-      if (w.title) L.push(`🧳 ${w.title}`);
-      if (!r || r.price == null) { L.push(`✈️ ${placeOf(w)} · אין מחיר כרגע`); continue; }
-      L.push(`✈️ ${placeOf(w)} · דרך ${CITY(r.city || w.city)} · ${airHe(r.out) || 'טיסה ישירה'}`);
-      L.push(`🗓️ ${heFull(r.outDate)} ← ${heFull(r.backDate)} · ${nights(r.outDate, r.backDate)} לילות`);
-      const per = (n) => Math.round(n / pn);
-      L.push(`💰 *${both(per(r.price))}${pn > 1 ? ' לנוסע' : ''}*${pn > 1 ? ` · ${both(r.price)} לכולם` : ''}`);
-      if (w.target) L.push(r.price <= w.target ? `✅ מתחת ליעד (${ils(per(w.target))}${pn > 1 ? ' לנוסע' : ''})` : `🎯 יעד ${ils(per(w.target))}${pn > 1 ? ' לנוסע' : ''} · חסר עוד ${ils(per(r.price - w.target))}`);
-      const h = wHist[w.id] || [], y = h.filter((x) => now - new Date(x.t) > 20 * 3600e3).pop();
-      if (y && y.price !== r.price) L.push(y.price > r.price ? `📉 ירד ב-${ils(per(y.price - r.price))}${pn > 1 ? ' לנוסע' : ''} מאתמול` : `📈 עלה ב-${ils(per(r.price - y.price))}${pn > 1 ? ' לנוסע' : ''} מאתמול`);
+    for (const owner of [...new Set(watches.map((w) => w.owner || null))]) {
+      const ws = watches.filter((w) => (w.owner || null) === owner);
+      const nm = [...new Set(ws.map((w) => w.who).filter(Boolean))], who = nm.length === 1 ? nm[0] : ownerName(owner);
+      const L = [`☀️ בוקר טוב${who ? ', ' + who : ''}! המחירים של הבוקר:`];
+      for (const w of ws) {
+        const r = wOut[w.id], pp = paxOf(w), pn = paxCount(pp);
+        L.push('');
+        if (w.title) L.push(`*${w.title}*`);
+        if (!r || r.price == null) { L.push(`✈️ ${placeOf(w, r)} · אין מחיר כרגע`); continue; }
+        const per = (n) => Math.round(n / pn);
+        L.push(`✈️ ${placeOf(w, r)} · דרך ${CITY(r.city || w.city)} · ${airHe(r.out) || 'טיסה'} ישיר`);
+        L.push(`${heFull(r.outDate)} ← ${heFull(r.backDate)} · ${nights(r.outDate, r.backDate)} לילות`);
+        L.push(`💰 *${both(per(r.price))}${pn > 1 ? ' לנוסע' : ''}*${pn > 1 ? ` · ביחד ${ils(r.price)}` : ''}`);
+        if (w.target) L.push(r.price <= w.target ? `✅ מתחת ליעד (${ils(per(w.target))}${pn > 1 ? ' לנוסע' : ''})` : `יעד ${ils(per(w.target))}${pn > 1 ? ' לנוסע' : ''} · חסר עוד ${ils(per(r.price - w.target))}`);
+        const h = wHist[w.id] || [], y = h.filter((x) => now - new Date(x.t) > 20 * 3600e3).pop();
+        if (y && y.price !== r.price) L.push(y.price > r.price ? `📉 ירד ב-${ils(per(y.price - r.price))}${pn > 1 ? ' לנוסע' : ''} מאתמול` : `📈 עלה ב-${ils(per(r.price - y.price))}${pn > 1 ? ' לנוסע' : ''} מאתמול`);
+      }
+      L.push('', 'המערכת בודקת כל חצי שעה ותשלח הודעה על כל ירידה.' + footer());
+      note(owner, L.join('\n'));
     }
-    L.push('', 'המערכת בודקת כל חצי שעה ותשלח הודעה על כל ירידה.' + footer());
-    notes.push(L.join('\n'));
     sys.daily = ilDate;
   }
 
@@ -579,16 +613,21 @@ function saveChannelStatus() {
   wr('data/state.json', state);
   console.log(`נבדקו ${okCount}/${keys.length}. התראות: ${alerts.length}`);
 
-  if (alerts.length) await notify.send(message(alerts));
-  if (notes.length) await notify.send(notes.join('\n\n'));
-  // "שלח הודעת בדיקה" מהאתר
-  const testReq = settings.testAt && settings.testAt !== sys.testDone;
-  if (testReq) { sys.testDone = settings.testAt; wr('data/state.json', state); }
-  // בקשת בדיקה גם מקובץ במאגר (test-request.json: {"at": "..."})
+  // התראות — כל משתמש מקבל רק על הטיולים שלו
+  for (const owner of [...new Set(alerts.map((x) => x.w.owner || null))])
+    await sendTo(owner, message(alerts.filter((x) => (x.w.owner || null) === owner), ownerName(owner)));
+  await sendNotes(notes);
+  // "שלח הודעת בדיקה" מהאתר — לכל משתמש לפי הבקשה שלו
+  const tested = new Set(alerts.map((x) => x.w.owner || null));
+  const statusTo = async (owner) => { if (tested.has(owner)) return; tested.add(owner);
+    await sendTo(owner, statusMessage(allWatches.filter((w) => (w.owner || null) === owner), wOut, '✅ בדיקה: מעקב הטיסות מחובר ועובד. ככה נראים הטיולים שלך עכשיו:', ownerName(owner))); };
+  const td = (sys.testDoneU = sys.testDoneU || {});
+  if (USERS) for (const [id, u] of Object.entries(USERS)) { const t = (u.settings || {}).testAt; if (t && t !== td[id]) { td[id] = t; await statusTo(id); } }
+  else { const testReq = settings.testAt && settings.testAt !== sys.testDone; if (testReq) { sys.testDone = settings.testAt; await statusTo(null); } }
+  // בקשת בדיקה מקובץ במאגר (test-request.json: {"at": "..."}) — למנהל
   const fileTest = rd('test-request.json', {}).at;
-  const testFile = fileTest && fileTest !== sys.testFile;
-  if (testFile) { sys.testFile = fileTest; wr('data/state.json', state); }
-  if (!alerts.length && (process.env.TEST_NOTIFY || testReq || testFile)) await notify.send(statusMessage(watches, wOut, '✅ בדיקה: מעקב הטיסות מחובר ועובד. ככה נראים הטיולים שלך עכשיו:'));
+  if ((fileTest && fileTest !== sys.testFile) || process.env.TEST_NOTIFY) { sys.testFile = fileTest; await statusTo(adminId()); }
+  wr('data/state.json', state);
   saveChannelStatus();
 })();
 
@@ -614,7 +653,7 @@ const t24 = (s) => { const m = /(\d{1,2}):(\d\d)\s*([AP])M(\+\d)?/.exec(s || '')
 const airHe = (a) => (a && a.air && AIR_HE[a.air.split(/[,·]/)[0].trim()]) || (a && a.air) || '';
 const nights = (a, b) => Math.round((new Date(b + 'T12:00:00Z') - new Date(a + 'T12:00:00Z')) / 864e5);
 const placeOf = (w, r) => w.dest ? (w.dest.he || w.dest.name) : CITY((r && r.city) || w.city);
-const hello = (ws) => { const n = [...new Set(ws.map((w) => w.who).filter(Boolean))]; return `☀️ שלום וברכה${n.length === 1 ? ', ' + n[0] : ''}`; };
+const hello = (ws, fallback) => { const n = [...new Set(ws.map((w) => w.who).filter(Boolean))]; const x = n.length === 1 ? n[0] : fallback; return `☀️ שלום וברכה${x ? ', ' + x : ''}`; };
 
 // גוף ההודעה של טיול אחד. *מודגש* ו-[טקסט](קישור) — notify.js מתאים לכל ערוץ
 function tripBlock(w, r, o = {}) {
@@ -647,13 +686,13 @@ function tripBlock(w, r, o = {}) {
 const footer = () => ['', ...(process.env.PAGE_URL ? [`[כל הטיולים](${process.env.PAGE_URL})`] : []), 'מחיר מ-Google Flights, לבדוק לפני הזמנה.'].join('\n');
 
 // מצב כל הטיולים עכשיו, בנוסח של ההתראות (להודעת בדיקה)
-function statusMessage(ws, wOut, head) {
-  const parts = [hello(ws) + '\n' + head];
+function statusMessage(ws, wOut, head, name) {
+  const parts = [hello(ws, name) + '\n' + head];
   for (const w of ws) { const r = wOut[w.id]; if (r && r.price != null && r.out && r.back) parts.push(tripBlock(w, r)); else parts.push(`${w.title ? `🧳 ${w.title}\n` : ''}✈️ ${placeOf(w)} · אין מחיר כרגע`); }
   return parts.join('\n\n') + '\n' + footer();
 }
-function message(alerts) {
-  const parts = [hello(alerts.map((x) => x.w))];
+function message(alerts, name) {
+  const parts = [hello(alerts.map((x) => x.w), name)];
   for (const x of alerts) parts.push(tripBlock(x.w, x.r, { from: x.from, why: x.why, lowest: x.lowest, alert: true }));
   return parts.join('\n\n').replace(/^(☀️[^\n]*)\n\n/, '$1\n') + '\n' + footer();
 }

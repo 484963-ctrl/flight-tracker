@@ -23,10 +23,11 @@ async function shortLinks(t) {
   return t.replace(LINK, (_, l, u) => `[${l}](${map[u]})`);
 }
 
-async function telegram(text) {
+async function telegram(text, to = {}) {
   if (!E.TELEGRAM_TOKEN) return 'טלגרם: לא הוגדר';
   const api = `https://api.telegram.org/bot${E.TELEGRAM_TOKEN}`;
-  let chat = E.TELEGRAM_CHAT_ID;
+  let chat = to.user ? to.telegram : E.TELEGRAM_CHAT_ID;
+  if (to.user && !chat) return 'טלגרם: המשתמש עוד לא חיבר';
   const f = path.join(__dirname, 'data', 'telegram-chat.txt');
   if (!chat && fs.existsSync(f)) chat = fs.readFileSync(f, 'utf8').trim();
   if (!chat) {
@@ -55,14 +56,14 @@ async function telegram(text) {
   return 'טלגרם: ' + (!bad ? 'נשלח' : 'שגיאה ' + bad);
 }
 
-async function whatsapp(text) {
+async function whatsapp(text, to = {}) {
   text = asPlain(await shortLinks(text), true);
   // TextMeBot: נשלח מהוואטסאפ שחובר אצלם, לכל המספרים ב-WHATSAPP_TO (מופרדים בפסיק)
   if (E.TEXTMEBOT_APIKEY) {
-    const to = (E.WHATSAPP_TO || E.WHATSAPP_PHONE || '').split(',').map((x) => x.trim()).filter(Boolean);
-    if (!to.length) return 'וואטסאפ: חסר WHATSAPP_TO';
+    const nums = (to.user ? (to.whatsapp || '') : (E.WHATSAPP_TO || E.WHATSAPP_PHONE || '')).split(',').map((x) => x.trim()).filter(Boolean);
+    if (!nums.length) return to.user ? 'וואטסאפ: למשתמש אין מספר' : 'וואטסאפ: חסר WHATSAPP_TO';
     const res = [];
-    for (const [i, n] of to.entries()) {
+    for (const [i, n] of nums.entries()) {
       if (i) await new Promise((r) => setTimeout(r, 6000)); // לפחות 5 שניות בין הודעות — המלצת TextMeBot כדי שוואטסאפ לא יחסום
       // POST — הודעה ארוכה בכתובת (GET) נכשלת ב-414
       const r = await fetch('https://api.textmebot.com/send.php', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, // בלי charset — אחרת הם לא קוראים את השדות
@@ -100,16 +101,19 @@ let chosen = { telegram: true, whatsapp: true, email: true };
 const setChannels = (c) => { if (c && typeof c === 'object') chosen = { ...chosen, ...c }; };
 
 const status = {}; // תוצאת השליחה האחרונה בכל ערוץ
-async function send(text) {
+// to: { channels } — למנהל (הערוצים שב-GitHub); { user: true, telegram, whatsapp, channels } — למשתמש אחר
+async function send(text, to = {}) {
+  const ch = { ...chosen, ...(to.channels || {}) };
   for (const [k, fn] of [['telegram', telegram], ['whatsapp', whatsapp], ['email', email]]) {
-    if (chosen[k] === false) { console.log(k + ': כבוי באתר'); continue; }
+    if (ch[k] === false) { console.log(k + ': כבוי באתר'); continue; }
+    if (to.user && k === 'email') continue;
     try {
-      const r = await fn(text);
+      const r = await fn(text, to);
       console.log(r);
-      if (configured()[k]) status[k] = { ok: /נשלח/.test(r), msg: r, t: new Date().toISOString() };
+      if (!to.user && configured()[k]) status[k] = { ok: /נשלח/.test(r), msg: r, t: new Date().toISOString() };
     } catch (e) {
       console.log(k + ': שגיאה', e.message);
-      status[k] = { ok: false, msg: e.message, t: new Date().toISOString() };
+      if (!to.user) status[k] = { ok: false, msg: e.message, t: new Date().toISOString() };
     }
   }
 }
