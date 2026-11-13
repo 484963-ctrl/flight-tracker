@@ -474,6 +474,10 @@ function tripForm(p, w = {}) {
     <fieldset><legend>🛬 חזור</legend><div class="row">
       ${winFields(p, 'WB', ...winOf(w, 'back'))}
       </div><div class="row" style="margin-top:8px"><span style="align-self:center;color:var(--mute);font-size:14px">ובכל יום — שעת המראה:</span>${hoursSel(p + 'HB', w.backHours)}</div></fieldset>
+    <fieldset><legend>🌙 אורך הטיול (לא חובה)</legend><div class="row">
+      <label>מ-<input type="number" id="${p}NMin" min="1" max="60" style="width:80px" placeholder="—" value="${w.nightsMin || ''}"></label>
+      <label>עד<input type="number" id="${p}NMax" min="1" max="60" style="width:80px" placeholder="—" value="${w.nightsMax || ''}"></label>
+      <span style="align-self:flex-end;color:var(--mute);font-size:14px;padding-bottom:10px">לילות — רק צירופי תאריכים באורך הזה ייבדקו</span></div></fieldset>
     <fieldset><legend>✈️ חברות תעופה (טיסות ישירות) — בלי סימון = כל החברות</legend>
       <div class="chips">${AIRS.map(([k, he]) => `<label class="chip"><input type="checkbox" data-air="${p}" value="${k}" ${airs.includes(k) ? 'checked' : ''}> ${he}</label>`).join('')}</div></fieldset>
   </div>`;
@@ -488,6 +492,7 @@ function readTrip(p) {
     pax: { adults: +$(`#${p}PA`).value, children: +$(`#${p}PC`).value, infants: +$(`#${p}PI`).value },
     title: ($(`#${p}Title`).value || '').trim(),
     who: ($(`#${p}Who`).value || '').trim(),
+    nightsMin: +$(`#${p}NMin`).value || null, nightsMax: +$(`#${p}NMax`).value || null,
     cities: [...new Set([...document.querySelectorAll(DEST[p] ? `#${p}DAir [data-city="${p}"]:checked` : `#${p}Chips [data-city="${p}"]:checked`)].map((x) => x.value))],
     dest: DEST[p] ? { name: DEST[p].name, lat: DEST[p].lat, lon: DEST[p].lon, hours: DEST[p].hours, img: DEST[p].img || PIMG[DEST[p].name] || null, he: ($(`#${p}DHe`) && $(`#${p}DHe`).value.trim()) || DEST[p].he || '' } : null,
     drive: DEST[p] ? Object.fromEntries(Object.entries(DEST[p].drive).filter(([, t]) => t <= DEST[p].hours * 3600)) : null };
@@ -498,6 +503,11 @@ function checkTrip(t) {
   if (t.outTo <= t.outFrom || t.backTo <= t.backFrom) return 'ה"עד" צריך להיות אחרי ה"החל מ".';
   if ((Date.parse(t.outTo + ':00Z') - Date.parse(t.outFrom + ':00Z')) > 7 * 864e5 || (Date.parse(t.backTo + ':00Z') - Date.parse(t.backFrom + ':00Z')) > 7 * 864e5) return 'החלון של כל כיוון יכול להיות עד שבוע.';
   if (t.backTo.slice(0, 10) <= t.outFrom.slice(0, 10)) return 'החזור צריך להיות אחרי ההלוך.';
+  if (t.nightsMin && t.nightsMax && t.nightsMin > t.nightsMax) return 'באורך הטיול: ה"מ-" צריך להיות קטן או שווה ל"עד".';
+  if (t.nightsMin || t.nightsMax) {
+    const lo = nights(t.outTo.slice(0, 10), t.backFrom.slice(0, 10)), hi = nights(t.outFrom.slice(0, 10), t.backTo.slice(0, 10));
+    if ((t.nightsMin && t.nightsMin > hi) || (t.nightsMax && t.nightsMax < Math.max(1, lo))) return `לפי התאריכים שבחרת הטיול יכול להיות בין ${Math.max(1, lo)} ל-${hi} לילות — אורך הטיול שבחרת לא נכנס בזה.`;
+  }
   if (t.pax && t.pax.infants > t.pax.adults) return 'לכל תינוק צריך מבוגר אחד לפחות.';
   if (nights(t.out, t.back) > 60) return `בין ההלוך לחזור יש ${nights(t.out, t.back)} לילות — כדאי לבדוק את תאריך החזור (אולי השנה לא נכונה?).`;
   if (nights(new Date().toISOString().slice(0, 10), t.back) > 330) return 'אפשר לבדוק מחירים רק עד כ-11 חודשים קדימה — חברות התעופה עוד לא פתחו טיסות לתאריך הזה.';
@@ -509,6 +519,7 @@ function optsText(w) {
   const lg = (n, k) => { const [F, T] = winOf(w, k); return F && !isExactDay(F, T) ? `${n}: ${winText(F, T)}` : ''; };
   const f = [lg('הלוך', 'out'), lg('חזור', 'back')].filter(Boolean);
   if (f.length) o.push('🗓️ ' + f.join(' · '));
+  if (w.nightsMin || w.nightsMax) o.push(`🌙 ${w.nightsMin && w.nightsMax ? (w.nightsMin === w.nightsMax ? w.nightsMin : `${w.nightsMin}–${w.nightsMax}`) : w.nightsMin ? `לפחות ${w.nightsMin}` : `עד ${w.nightsMax}`} לילות`);
   if (w.noShabbat !== false) o.push('🕯️ בלי שבת וחג');
   if (w.outHours) o.push(`המראה בהלוך ${hh(w.outHours[0])}–${hh(w.outHours[1])}`);
   if (w.backHours) o.push(`המראה בחזור ${hh(w.backHours[0])}–${hh(w.backHours[1])}`);

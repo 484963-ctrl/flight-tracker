@@ -398,11 +398,14 @@ function saveChannelStatus() {
     const okB = (d) => { const m = match(w, w.backHours); return (x) => m(x) && inFlex(d, w.back, w.backBefore, w.backAfter, x.dep) && (!w.noShabbat || shabbatOk(d, x.dep, x.arr, w.city, cfg.origin)); };
     const outs = around(w.out, w.outBefore, w.outAfter).map((d) => { const A = merged[`${cfg.origin}|${w.city}|${d}${paxKey(paxOf(w))}`]; if (!A || A.status === 'FAIL') allLoaded = false; return { d, A, ok: okO(d), f: A && pick(A.res, okO(d)) }; });
     const backs = around(w.back, w.backBefore, w.backAfter).map((d) => { const B = merged[`${w.city}|${cfg.origin}|${d}${paxKey(paxOf(w))}`]; if (!B || B.status === 'FAIL') allLoaded = false; return { d, B, ok: okB(d), f: B && pick(B.res, okB(d)) }; });
+    // אורך הטיול (לילות): רק צירופים בטווח שנבחר
+    const nMin = +w.nightsMin || 1, nMax = +w.nightsMax || 999;
+    const lenOk = (o, k) => { const n = Math.round((new Date(k.d + 'T12:00:00Z') - new Date(o.d + 'T12:00:00Z')) / 864e5); return n >= nMin && n <= nMax; };
     const pairs = [];
-    for (const o of outs) for (const k of backs) if (k.d > o.d && o.f && k.f) pairs.push({ o, k, ow: o.f.price + k.f.price });
+    for (const o of outs) for (const k of backs) if (k.d > o.d && lenOk(o, k) && o.f && k.f) pairs.push({ o, k, ow: o.f.price + k.f.price });
     pairs.sort((x, y) => x.ow - y.ow);
     const allDates = [];
-    for (const o of outs) for (const k of backs) if (k.d > o.d) allDates.push({ o, k });
+    for (const o of outs) for (const k of backs) if (k.d > o.d && lenOk(o, k)) allDates.push({ o, k });
     // יש בכלל טיסה ישירה לשדה הזה בטווח? (בלי קשר להגדרות)
     const anyDirect = [...outs.map((x) => x.A), ...backs.map((x) => x.B)].some((L) => L && L.status === 'OK' && (L.res || []).length);
     const noDirect = allLoaded && ![...outs.map((x) => x.A)].some((L) => L && L.status === 'OK' && (L.res || []).length) || allLoaded && ![...backs.map((x) => x.B)].some((L) => L && L.status === 'OK' && (L.res || []).length);
