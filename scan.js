@@ -563,7 +563,11 @@ function saveChannelStatus() {
   // "שלח הודעת בדיקה" מהאתר
   const testReq = settings.testAt && settings.testAt !== sys.testDone;
   if (testReq) { sys.testDone = settings.testAt; wr('data/state.json', state); }
-  if (!alerts.length && (process.env.TEST_NOTIFY || testReq)) await notify.send('✈️ בדיקה: מעקב הטיסות מחובר ועובד.\nתקבל הודעה על כל ירידה במחיר של טיול שלך, וסיכום כל בוקר.' + (process.env.PAGE_URL ? '\n\n' + process.env.PAGE_URL : ''));
+  // בקשת בדיקה גם מקובץ במאגר (test-request.json: {"at": "..."})
+  const fileTest = rd('test-request.json', {}).at;
+  const testFile = fileTest && fileTest !== sys.testFile;
+  if (testFile) { sys.testFile = fileTest; wr('data/state.json', state); }
+  if (!alerts.length && (process.env.TEST_NOTIFY || testReq || testFile)) await notify.send('✈️ בדיקה: מעקב הטיסות מחובר ועובד.\nתקבל הודעה על כל ירידה במחיר של טיול שלך, וסיכום כל בוקר.' + (process.env.PAGE_URL ? '\n\n' + process.env.PAGE_URL : ''));
   saveChannelStatus();
 })();
 
