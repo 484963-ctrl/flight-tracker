@@ -624,6 +624,10 @@ function saveChannelStatus() {
     for (const [id, u] of Object.entries(USERS)) {
       const k = (known[id] = known[id] || {});
       if (!k.seen) { k.seen = now.toISOString(); if (first || u.admin) k.welcomed = true; }
+      if (u.admin) k.wa = true;
+      // הוואטסאפ אומת עכשיו (שלח הודעה למספר של המערכת) — אישור בוואטסאפ
+      if (!k.wa && u.whatsapp) { k.wa = now.toISOString(); k.welcomed = k.welcomed || now.toISOString();
+        await notify.send(`${hello([], u.name)}\n✅ הוואטסאפ חובר!\nמעכשיו תקבל כאן התראה על כל ירידה במחיר של הטיולים שלך, וסיכום כל בוקר ב-8:00.${footer()}`, { user: true, whatsapp: u.whatsapp, channels: { telegram: false, whatsapp: true } }); }
       if (!k.welcomed && (u.whatsapp || u.tg_chat)) { k.welcomed = now.toISOString();
         await sendTo(id, `${hello([], u.name)}\nברוך הבא למעקב הטיסות! ✈️\nכאן תקבל התראה על כל ירידה במחיר של הטיולים שלך, וסיכום כל בוקר ב-8:00.${footer()}`); }
     }

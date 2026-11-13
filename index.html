@@ -107,6 +107,7 @@
   td.best { background:var(--gold); font-weight:800; }
   .sat td { color:#aaa; }
   .small { font-size:12px; color:var(--mute); display:block; }
+  .ltr { direction:ltr; unicode-bidi:isolate; display:inline-block; }
   a.btn { display:inline-block; margin-top:6px; padding:8px 14px; border-radius:10px; background:#2aabee; color:#fff; font-weight:700; text-decoration:none; }
   #admList table { width:100%; border-collapse:collapse; font-size:14px; } #admList td, #admList th { padding:6px; border-bottom:1px solid #eee; text-align:right; }
   .tf { display:grid; gap:12px; }
@@ -711,7 +712,7 @@ const CHN = {
   whatsapp: { name: '💬 וואטסאפ', how: `<b>דרך TextMeBot:</b><br>1. ב-<a href="https://textmebot.com/" target="_blank">textmebot.com</a> לוחצים "בקשת ApiKey" ומקבלים מפתח במייל.<br>2. לפי הקישור במייל מחברים וואטסאפ (סריקת קוד).<br>3. <a href="${SECRETS}" target="_blank">כאן</a> שומרים <code>TEXTMEBOT_APIKEY</code> (המפתח), ו-<code>WHATSAPP_TO</code> — המספר שמקבל את ההודעות (למשל <bdi dir="ltr">+972501234567</bdi>; כמה מספרים — מפרידים בפסיק).<br>עדיף שהמספר שמקבל יהיה אחר מהמספר שחובר — אחרת ההודעה נכנסת ל"הודעה לעצמי" ולא מצלצלת.` },
   email: { name: '📧 מייל', how: `1. ב-Gmail צריך אימות דו-שלבי, ואז <a href="https://myaccount.google.com/apppasswords" target="_blank">סיסמת אפליקציה</a> (16 אותיות).<br>2. <a href="${SECRETS}" target="_blank">כאן</a> שומרים <code>MAIL_USER</code> (כתובת ה-Gmail) ו-<code>MAIL_PASS</code> (סיסמת האפליקציה).<br>3. רשות: <code>MAIL_TO</code> — לשלוח לכתובת אחרת.` },
 };
-const BOT = 'moshe_flights_bot';
+const BOT = 'moshe_flights_bot', SYSNUM = '053-821-3964', SYSNUM_INT = '972538213964';
 function renderChannels(can) {
   if (!ME) return;
   const ch = (SET.channels) || { telegram: true, whatsapp: true, email: true };
@@ -719,15 +720,16 @@ function renderChannels(can) {
   if (document.activeElement !== $('#pWa')) $('#pWa').value = ME.whatsapp || '';
   // המנהל — הערוצים שמוגדרים ב-GitHub; משתמש — הטלגרם והוואטסאפ שלו
   const conf = ME.admin ? { telegram: !!(CH.telegram || {}).configured, whatsapp: !!(CH.whatsapp || {}).configured, email: !!(CH.email || {}).configured }
-    : { telegram: !!ME.tg, whatsapp: !!ME.whatsapp };
+    : { telegram: !!ME.tg, whatsapp: !!(ME.whatsapp && ME.wa_ok) };
   const tgLink = `https://t.me/${BOT}?start=${ME.tg_code}`;
   const how = { telegram: `<a class="btn" href="${tgLink}" target="_blank">✈️ לחבר את הטלגרם שלי</a><div class="small">נפתח הבוט — לוחצים <b>Start</b> (התחלה). תוך דקה־שתיים יגיע אישור.</div>`,
-    whatsapp: 'כותבים למעלה את מספר הוואטסאפ ולוחצים "שמירה". כדאי לשמור באנשי הקשר את המספר שממנו נשלחות ההודעות: <bdi dir="ltr">053-821-3964</bdi>, ולשלוח לו "שלום".',
+    whatsapp: !ME.whatsapp ? '1. כותבים למעלה את מספר הוואטסאפ ולוחצים "שמירה".<br>2. שומרים באנשי הקשר את המספר של המערכת, ושולחים לו "שלום".'
+      : `⏳ המספר נשמר. עכשיו: שומרים באנשי הקשר את המספר של המערכת <span class="ltr">${SYSNUM}</span>, ושולחים לו "שלום" מהוואטסאפ של <span class="ltr">${esc(ME.whatsapp)}</span>.<br><a class="btn" style="background:#25d366" href="https://wa.me/${SYSNUM_INT}?text=${encodeURIComponent('שלום')}" target="_blank">💬 לשלוח "שלום" בוואטסאפ</a><div class="small">אחרי ששולחים — תוך כמה דקות יגיע אישור בוואטסאפ, ומאז ההתראות יתחילו.</div>`,
     email: 'רק למנהל, דרך GitHub.' };
   $('#chans').innerHTML = Object.entries(CHN).filter(([k]) => ME.admin || k !== 'email').map(([k, c]) => {
     const on = ch[k] !== false, st = ME.admin ? (CH[k] || {}) : {}, last = st.last;
-    const stat = !conf[k] ? `<div class="st no">✗ עוד לא מחובר</div><div class="small" style="margin-top:4px">${ME.admin ? `<details><summary>איך מחברים?</summary>${c.how}</details>` : how[k]}</div>`
-      : `<div class="st ok">✓ מחובר${k === 'whatsapp' && !ME.admin ? ` · <bdi dir="ltr">${esc(ME.whatsapp)}</bdi>` : ''}${last ? ` · הודעה אחרונה ${ago(last.t)}${last.ok ? '' : ' — <span style="color:var(--red)">נכשלה</span>'}` : ''}</div>${k === 'telegram' && !ME.admin ? `<div class="small"><a href="${tgLink}" target="_blank">לחבר מחדש</a></div>` : ''}`;
+    const stat = !conf[k] ? `<div class="st no"${k === 'whatsapp' && ME.whatsapp && !ME.admin ? ' style="color:#b07000"' : ''}>${k === 'whatsapp' && ME.whatsapp && !ME.admin ? '⏳ ממתין ל"שלום" ממך' : '✗ עוד לא מחובר'}</div><div class="small" style="margin-top:4px">${ME.admin ? `<details><summary>איך מחברים?</summary>${c.how}</details>` : how[k]}</div>`
+      : `<div class="st ok">✓ מחובר${k === 'whatsapp' && !ME.admin ? ` · <span class="ltr">${esc(ME.whatsapp)}</span>` : ''}${last ? ` · הודעה אחרונה ${ago(last.t)}${last.ok ? '' : ' — <span style="color:var(--red)">נכשלה</span>'}` : ''}</div>${k === 'telegram' && !ME.admin ? `<div class="small"><a href="${tgLink}" target="_blank">לחבר מחדש</a></div>` : ''}`;
     return `<div class="chan ${on && conf[k] ? 'on' : ''}">
       <label class="tg"><input type="checkbox" data-ch="${k}" ${on ? 'checked' : ''} ${can ? '' : 'disabled'}> ${c.name}</label>${stat}</div>`;
   }).join('');
@@ -759,7 +761,7 @@ let ADM = null;
 async function renderAdmin(force) {
   if (!ADM || force) { try { ADM = await rpc('ft_admin_list'); } catch { ADM = []; } try { $('#admInvSt').textContent = (await rpc('ft_admin_has_invite')) ? '✓ יש קוד פעיל' : '✗ עוד אין קוד — בלי קוד אי אפשר להצטרף'; } catch {} }
   $('#admList').innerHTML = !ADM.length ? '<div class="note">עוד אין משתמשים.</div>' : `<table><tr><th>משתמש</th><th>טיולים</th><th>טלגרם</th><th>וואטסאפ</th><th>מצב</th><th></th></tr>${ADM.map((u) => `<tr>
-    <td>${esc(u.name || '—')}<span class="small"><bdi dir="ltr">${esc(u.email || '')}</bdi></span></td><td>${u.trips}</td><td>${u.tg ? '✓' : '—'}</td><td>${u.whatsapp ? `<bdi dir="ltr">${esc(u.whatsapp)}</bdi>` : '—'}</td>
+    <td>${esc(u.name || '—')}<span class="small"><bdi dir="ltr">${esc(u.email || '')}</bdi></span></td><td>${u.trips}</td><td>${u.tg ? '✓' : '—'}</td><td>${u.whatsapp ? `<span class="ltr">${esc(u.whatsapp)}</span>${u.wa_ok ? ' ✓' : ' <span class="small">(עוד לא שלח "שלום")</span>'}` : '—'}</td>
     <td>${u.admin ? '⭐ מנהל' : u.blocked ? '⛔ חסום' : u.approved ? '✅ מאושר' : u.invited ? '⏳ ממתין לאישור' : '⏳ בלי קוד הזמנה'}</td>
     <td>${u.admin ? '' : `${!u.approved || u.blocked ? `<button data-adm="${u.id}" data-a="1" data-b="0">✅ אישור</button>` : ''} ${!u.blocked ? `<button data-adm="${u.id}" data-a="${u.approved ? 1 : 0}" data-b="1">⛔ חסימה</button>` : ''}`}</td></tr>`).join('')}</table>`;
   document.querySelectorAll('[data-adm]').forEach((b) => b.onclick = async () => {
