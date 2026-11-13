@@ -37,11 +37,22 @@ async function telegram(text) {
     chat = String(m.chat.id);
     fs.writeFileSync(f, chat);
   }
-  const r = await fetch(`${api}/sendMessage`, {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ chat_id: chat, text: asHtml(text), parse_mode: 'HTML', disable_web_page_preview: true }),
-  });
-  return 'טלגרם: ' + (r.ok ? 'נשלח' : 'שגיאה ' + r.status);
+  // טלגרם מקבל עד 4096 תווים — מחלקים בין פסקאות
+  const chunks = [];
+  for (const p of text.split('\n\n')) {
+    const last = chunks.length - 1;
+    if (last >= 0 && asHtml(chunks[last] + '\n\n' + p).length <= 3900) chunks[last] += '\n\n' + p;
+    else chunks.push(p);
+  }
+  let bad = 0;
+  for (const c of chunks) {
+    const r = await fetch(`${api}/sendMessage`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chat_id: chat, text: asHtml(c).slice(0, 4096), parse_mode: 'HTML', disable_web_page_preview: true }),
+    });
+    if (!r.ok) bad = r.status;
+  }
+  return 'טלגרם: ' + (!bad ? 'נשלח' : 'שגיאה ' + bad);
 }
 
 async function whatsapp(text) {
