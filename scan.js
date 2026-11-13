@@ -609,21 +609,18 @@ function tripBlock(w, r, o = {}) {
   else if (o.alert) L.push(`🔔 המחיר${pl} עכשיו: *${both(per(r.price))}*`);
   if (o.why === 'target') L.push(`✅ מתחת למחיר שקבעת (${ils(per(w.target))}${pl})`);
   if (o.lowest) L.push('🏆 המחיר הכי נמוך שראינו');
-  L.push('');
-  L.push(`📍 דרך ${CITY(r.city || w.city)} · ${airHe(a) || 'טיסה'} · טיסה ישירה`);
+  L.push(`📍 דרך ${CITY(r.city || w.city)} · ${airHe(a) || 'טיסה'} · טיסה ישירה${r.rt ? '' : ' · שני כרטיסים לכיוון אחד'}`);
+  L.push(pn > 1 ? `💰 *${both(per(r.price))} לנוסע* · ${both(r.price)} ל-${paxText(pp)}` : `💰 *${both(r.price)}*`);
   L.push(`🛫 הלוך: ${heFull(od)} · ${t24(a.dep)}${a.arr ? ` ← נוחתים ${t24(a.arr)}` : ''}`);
   L.push(`🛬 חזור: ${heFull(bd)} · ${t24(b.dep)}${b.arr ? ` ← נוחתים ${t24(b.arr)}` : ''}`);
   L.push(`[🔎 לפתוח בגוגל טיסות](${gfRound(od, bd, cfg.origin, r.city || w.city, pp)})`);
   L.push(`🌙 ${nights(od, bd)} לילות`);
-  L.push('');
-  const how = r.rt ? 'הלוך-חזור בכרטיס אחד' : 'שני כרטיסים לכיוון אחד';
-  L.push(pn > 1 ? `💰 *${both(per(r.price))} לנוסע*\n👥 ביחד ל-${paxText(pp)}: ${both(r.price)} · ${how}` : `💰 *${both(r.price)}* · ${how}`);
   // שאר שדות התעופה — שורה קצרה לכל אחד
   const cs = (r.cities || []).filter((c) => c.city !== (r.city || w.city)).sort((x, y) => (x.price ?? 1e9) - (y.price ?? 1e9));
   if (cs.length) {
     L.push('', `🗺️ שאר השדות${pn > 1 ? ' (לנוסע)' : ''}:`);
     for (const c of cs) L.push(`▫️ ${CITY(c.city)} — ${c.price != null
-      ? `${both(pn > 1 ? Math.round(c.price / pn) : c.price)} · ${+c.outDate.slice(8)}.${+c.outDate.slice(5, 7)}–${+c.backDate.slice(8)}.${+c.backDate.slice(5, 7)}${c.price - r.price > 0 ? ` (יקר ב-${ils(pn > 1 ? Math.round((c.price - r.price) / pn) : c.price - r.price)})` : ''} · [🔎](${gfRound(c.outDate, c.backDate, cfg.origin, c.city, pp)})`
+      ? `${both(pn > 1 ? Math.round(c.price / pn) : c.price)} · ${+c.outDate.slice(8)}.${+c.outDate.slice(5, 7)}–${+c.backDate.slice(8)}.${+c.backDate.slice(5, 7)} · [🔎](${gfRound(c.outDate, c.backDate, cfg.origin, c.city, pp)})`
       : c.none ? (c.why === 'nodirect' ? 'אין טיסה ישירה' : c.why === 'retry' ? 'לא נמצא הפעם, ייבדק שוב' : 'אין טיסה לפי ההגדרות') : 'עוד נבדק'}`);
   }
   return L.join('\n');
@@ -633,5 +630,5 @@ const footer = () => ['', ...(process.env.PAGE_URL ? [`[📊 כל הטיולים
 function message(alerts) {
   const parts = [hello(alerts.map((x) => x.w))];
   for (const x of alerts) parts.push(tripBlock(x.w, x.r, { from: x.from, why: x.why, lowest: x.lowest, alert: true }));
-  return parts.join('\n\n') + '\n' + footer();
+  return parts.join('\n\n').replace(/^(☀️[^\n]*)\n\n/, '$1\n') + '\n' + footer();
 }
