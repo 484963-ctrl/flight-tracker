@@ -479,7 +479,8 @@ function saveChannelStatus() {
                    gridMin: plan[w.id].gridMin != null && price != null && plan[w.id].gridMin < price ? plan[w.id].gridMin : null,
                    outUrl: best && best.o.A && best.o.A.url, backUrl: best && best.k.B && best.k.B.url,
                    stale: !!(best && !isRt && ((best.o.A && best.o.A.stale) || (best.k.B && best.k.B.stale))), none: allLoaded && price == null && !plan[w.id].rt.some((x) => x.r.status === 'FAIL') };
-    if (wOut[w.id].price == null && wOut[w.id].none) wOut[w.id].why = plan[w.id].noDirect ? 'nodirect' : 'filters';
+    // 'אין טיסות ישירות' — רק אם זה נמצא כבר בבדיקה קודמת (גוגל לפעמים מחזיר 'אין תוצאות' בטעות)
+    if (wOut[w.id].price == null && wOut[w.id].none) { const nd = (prev.noDirect || {})[w.city]; wOut[w.id].why = plan[w.id].noDirect ? (nd && typeof nd === 'object' && nd.n >= 1 ? 'nodirect' : 'retry') : 'filters'; }
     subOut[w.id] = wOut[w.id];
     if (w.id !== w.parent) delete wOut[w.id];
   }
@@ -501,7 +502,7 @@ function saveChannelStatus() {
     if (!st0.firstDone && (price != null || wOut[w.id].none)) {
       st0.firstDone = now.toISOString();
       const pn = paxCount(paxOf(w));
-      const L = [`✅ הבדיקה הראשונה הסתיימה: ${w.dest ? '🎯 ' + (w.dest.he && w.dest.he !== w.dest.name ? `${w.dest.he} - ${w.dest.name}` : w.dest.name) : CITY(w.city)}`];
+      const L = [`✅ הבדיקה הראשונה הסתיימה: ${w.title ? `🧳 ${w.title} · ` : ''}${w.dest ? '🎯 ' + (w.dest.he && w.dest.he !== w.dest.name ? `${w.dest.he} - ${w.dest.name}` : w.dest.name) : CITY(w.city)}`];
       if (price == null) L.push('לא נמצאה טיסה ישירה שמתאימה להגדרות שלך בתאריכים האלה.');
       else {
         L.push(`הכי זול: ${CITY(w.city)} — ${ils(price)}${pn > 1 ? ` לכל ${pn} הנוסעים (${ils(Math.round(price / pn))} לנוסע)` : ''}`);
@@ -545,7 +546,7 @@ function saveChannelStatus() {
       const dd = r && r.outDate ? `${he(r.outDate)} – ${he(r.backDate)}` : `${he(w.out)} – ${he(w.back)}`;
       const pp = paxOf(w), pn = paxCount(pp);
       const nC = citiesOf(w).length, many = nC > 1;
-      L.push(`${CITY(w.city)}${many ? ` (הזול מבין ${nC} יעדים)` : ''} ${dd}${pn > 1 ? ` (${pn} נוסעים)` : ''}: ${p}${t}`);
+      L.push(`${w.title ? `🧳 ${w.title}: ` : ''}${CITY(w.city)}${many ? ` (הזול מבין ${nC} יעדים)` : ''} ${dd}${pn > 1 ? ` (${pn} נוסעים)` : ''}: ${p}${t}`);
     }
     L.push('', 'המערכת בודקת כל חצי שעה ותשלח הודעה על כל ירידה.');
     if (process.env.PAGE_URL) L.push(process.env.PAGE_URL);
@@ -555,7 +556,8 @@ function saveChannelStatus() {
 
   const fx = await getFx(prev.fx);
   const noDirect = { ...(prev.noDirect || {}) };
-  for (const w of subs) { const P = plan[w.id]; if (!P || !P.allLoaded) continue; if (P.noDirect) noDirect[w.city] = now.toISOString(); else if (P.anyDirect) delete noDirect[w.city]; }
+  for (const w of subs) { const P = plan[w.id]; if (!P || !P.allLoaded) continue;
+    if (P.noDirect) { const o = typeof noDirect[w.city] === 'object' ? noDirect[w.city] : { n: 0 }; noDirect[w.city] = { n: (o.n || 0) + 1, t: now.toISOString() }; } else if (P.anyDirect) delete noDirect[w.city]; }
   const rtLog = Object.fromEntries(subs.map((w) => [w.id, (plan[w.id] ? plan[w.id].rt : []).flatMap((x) => [`[${x.r.status}${x.r.price ? ' ₪' + x.r.price : ''}]`, ...(x.r.log || [])])]));
   wr('data/latest.json', { updated: ONLY_NEW ? (prev.updated || now.toISOString()) : now.toISOString(), quickAt: ONLY_NEW ? now.toISOString() : prev.quickAt, fx, rtLog, noDirect, ok: okCount, total: keys.length, overviewAt: overviewDue ? now.toISOString() : prev.overviewAt, legs: merged, watches: wOut });
   wr('data/watch-history.json', wHist);
@@ -577,6 +579,7 @@ const ils = (n) => '₪' + n.toLocaleString('en-US');
 function message(alerts) {
   const L = [];
   for (const { w, price, a, b, rt, od, bd, why, from } of alerts) {
+    if (w.title) L.push(`🧳 ${w.title}`);
     L.push(`🔔 ${CITY(w.city)} — ${airLabel(w)} (ישיר) · ${paxText(paxOf(w))}`);
     if (Array.isArray(w.cities) && new Set(w.cities).size > 1) L.push(`(הזול מבין: ${[...new Set(w.cities)].map(CITY).join(', ')})`);
     L.push(from != null ? `המחיר ירד מ-${ils(from)} ל-${ils(price)}` : `המחיר עכשיו: ${ils(price)}`);

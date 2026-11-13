@@ -54,6 +54,7 @@
   .photo .cap { position:relative; z-index:1; padding:12px 16px; color:#fff; width:100%; }
   .city { font-size:28px; font-weight:900; line-height:1.1; text-shadow:0 2px 10px rgba(0,0,0,.4); }
   .photo .air { color:#fff; opacity:.92; font-size:14px; }
+  .ttl { display:inline-block; background:rgba(255,255,255,.92); color:var(--blue2); font-weight:800; font-size:15px; padding:3px 10px; border-radius:999px; margin-bottom:6px; text-shadow:none; }
   .ribbon { position:absolute; top:12px; right:12px; z-index:1; background:var(--green); color:#fff; font-weight:800; font-size:14px; padding:5px 12px; border-radius:999px; box-shadow:0 2px 8px rgba(0,0,0,.25); }
   .cb { padding:14px 18px 16px; }
   .air { font-size:14px; color:var(--mute); }
@@ -204,6 +205,7 @@ const usd = (n) => (n == null || !L.fx || !L.fx.rate) ? '' : '$' + Math.round(n 
 const usdTag = (n, cls = 'usd') => { const u = usd(n); return u ? ` <span class="${cls}"><bdi dir="ltr">≈ ${u}</bdi></span>` : ''; };
 const nights = (a, b) => Math.round((new Date(b) - new Date(a)) / 864e5);
 const ago = (t) => { const m = Math.round((Date.now() - new Date(t)) / 6e4); return m < 1 ? 'עכשיו' : m < 60 ? `לפני ${m} דק׳` : m < 1440 ? `לפני ${Math.round(m / 60)} שעות` : `לפני ${Math.round(m / 1440)} ימים`; };
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const ltr = (s) => `<bdi dir="ltr">${s}</bdi>`;
 
 // --- הטיולים נשמרים במסד (Supabase); הכניסה לעריכה בקוד ---
@@ -359,7 +361,7 @@ function destList(p, checked) {
   const list = Object.entries(d.drive || {}).filter(([, t]) => t <= d.hours * 3600).sort((a, b) => a[1] - b[1]);
   if (!list.length) return `<div class="msg err">אין שדה תעופה עם טיסות ישירות מתל אביב עד ${d.hours} שעות נסיעה מ-${d.name}.</div>`;
   return `<details class="dair"><summary>🚗 ${list.length} שדות תעופה עד ${d.hours} שעות נסיעה מ-${d.name} ▾</summary>
-    <div class="chips" style="margin-top:8px">${list.map(([c, t]) => { const nd = L.noDirect && L.noDirect[c]; return `<label class="chip" ${nd ? 'style="opacity:.6" title="בבדיקות האחרונות לא נמצאו טיסות ישירות מתל אביב לשדה הזה"' : ''}><input type="checkbox" data-city="${p}" value="${c}" ${(checked ? checked.includes(c) : !nd) ? 'checked' : ''}> ${cnameAll(c)} · 🚗 ${hm(t)}${nd ? ' · (אין טיסות ישירות)' : ''}</label>`; }).join('')}</div></details>`;
+    <div class="chips" style="margin-top:8px">${list.map(([c, t]) => { const nd0 = L.noDirect && L.noDirect[c], nd = nd0 && (typeof nd0 !== 'object' || nd0.n >= 2); return `<label class="chip" ${nd ? 'style="opacity:.6" title="בבדיקות האחרונות לא נמצאו טיסות ישירות מתל אביב לשדה הזה"' : ''}><input type="checkbox" data-city="${p}" value="${c}" ${(checked ? checked.includes(c) : !nd) ? 'checked' : ''}> ${cnameAll(c)} · 🚗 ${hm(t)}${nd ? ' · (אין טיסות ישירות)' : ''}</label>`; }).join('')}</div></details>`;
 }
 const hav = (a, b, c, d) => { const R = 6371, r = Math.PI / 180, x = Math.sin((c - a) * r / 2) ** 2 + Math.cos(a * r) * Math.cos(c * r) * Math.sin((d - b) * r / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(x)); };
 async function destCompute(p, lat, lon, name, nd) {
@@ -454,6 +456,7 @@ document.addEventListener('change', (e) => {
 function tripForm(p, w = {}) {
   const airs = w.id ? airsOf(w) : ['El Al'];
   return `<div class="tf">
+    <div class="row"><label style="flex:1;min-width:240px">🧳 שם הטיול (לא חובה)<input id="${p}Title" maxlength="60" placeholder="למשל: משפחת גינצברג · קיץ טירול 2027" value="${(w.title || '').replace(/"/g, '&quot;')}"></label></div>
     <div class="row">
 
       ${(() => { const px = paxOf(w), sel = (id, v, from, to, lbl) => `<label>${lbl}<select id="${p}${id}">${Array.from({ length: to - from + 1 }, (_, i) => i + from).map((n) => `<option value="${n}" ${n === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>`;
@@ -482,6 +485,7 @@ function readTrip(p) {
     outHours: hrs(p + 'HO'), backHours: hrs(p + 'HB'),
     airlines: [...document.querySelectorAll(`[data-air="${p}"]:checked`)].map((x) => x.value), noShabbat: $(`#${p}NoSh`).checked,
     pax: { adults: +$(`#${p}PA`).value, children: +$(`#${p}PC`).value, infants: +$(`#${p}PI`).value },
+    title: ($(`#${p}Title`).value || '').trim(),
     cities: [...new Set([...document.querySelectorAll(DEST[p] ? `#${p}DAir [data-city="${p}"]:checked` : `#${p}Chips [data-city="${p}"]:checked`)].map((x) => x.value))],
     dest: DEST[p] ? { name: DEST[p].name, lat: DEST[p].lat, lon: DEST[p].lon, hours: DEST[p].hours, img: DEST[p].img || PIMG[DEST[p].name] || null, he: ($(`#${p}DHe`) && $(`#${p}DHe`).value.trim()) || DEST[p].he || '' } : null,
     drive: DEST[p] ? Object.fromEntries(Object.entries(DEST[p].drive).filter(([, t]) => t <= DEST[p].hours * 3600)) : null };
@@ -558,13 +562,13 @@ function card(w, can) {
         const v = c.price != null ? (pc > 1 ? Math.round(c.price / pc) : c.price) : null;
         const inner = `<span class="cn">${star ? '⭐ ' : ''}${cname(c.city)}${w.drive && w.drive[c.city] ? ` <small>🚗 ${hm(w.drive[c.city])}</small>` : ''}</span>
           <span class="cp">${v != null ? `${ils(v)}${usd(v) ? ` <small><bdi dir="ltr">≈${usd(v)}</bdi></small>` : ''}` : c.none ? '—' : '⏳'}</span>
-          <span class="cd" title="${c.price != null ? `${dayName(c.outDate)} ${heD(c.outDate)} ← ${dayName(c.backDate)} ${heD(c.backDate)}${air ? ' · ' + air : ''}` : ''}">${c.price != null ? `${sd(c.outDate)} ← ${sd(c.backDate)}` : c.none ? (c.why === 'nodirect' ? '✈️ אין טיסות ישירות מתל אביב' : 'יש ישירות, לא לפי ההגדרות שלך') : 'בודק…'}</span>`;
+          <span class="cd" title="${c.price != null ? `${dayName(c.outDate)} ${heD(c.outDate)} ← ${dayName(c.backDate)} ${heD(c.backDate)}${air ? ' · ' + air : ''}` : ''}">${c.price != null ? `${sd(c.outDate)} ← ${sd(c.backDate)}` : c.none ? (c.why === 'nodirect' ? '✈️ אין טיסות ישירות מתל אביב' : c.why === 'retry' ? 'לא נמצאו טיסות בבדיקה הזו — ייבדק שוב' : 'יש ישירות, לא לפי ההגדרות שלך') : 'בודק…'}</span>`;
         const links = `<span class="cl">${c.price != null ? `<a href="${gfRound(c.outDate, c.backDate, CFG.origin || 'TLV', c.city, px)}" target="_blank" title="לראות את הטיסות בגוגל טיסות">✈️<span class="t"> טיסות</span></a>` : ''}</span>`;
         return `<div class="crow ${star ? 'best' : ''}">${inner}${links}</div>`; }).join('')}</div>` : '';
   return `<div class="card ${hit ? 'hit' : ''}">
     <div class="photo" style="background-image:url(${w.dest && (w.dest.img || PIMG[w.dest.name]) ? (w.dest.img || PIMG[w.dest.name]) : `img/${img}.jpg`})">
       ${hit ? '<div class="ribbon">✅ מתחת ליעד!</div>' : ''}
-      <div class="cap">${w.dest
+      <div class="cap">${w.title ? `<div class="ttl">🧳 ${esc(w.title)}</div>` : ''}${w.dest
         ? `<div class="city">🎯 ${destLabel(w.dest)}</div><div class="air">✈️ הכי זול: ${cname(cityNow)}${dr(cityNow)}${many ? ` · מבין ${citiesOfW(w).length} שדות` : ''} · ${air} · 🎫 ${paxText(px)}</div>`
         : `<div class="city">${cname(cityNow)}${many ? `<span style="font-size:15px;font-weight:600"> · הכי זול מבין ${citiesOfW(w).length} יעדים</span>` : ''}</div><div class="air">${air} · 🎫 ${paxText(px)}</div>`}</div>
     </div>
