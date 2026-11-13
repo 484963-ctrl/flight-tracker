@@ -442,10 +442,13 @@ function saveChannelStatus() {
       // קודם — הצירוף שהיה הכי זול בבדיקה הקודמת (אחרת המחיר "קופץ" כשהחיפוש לא מגיע אליו)
       const pw = (prev.watches || {})[w.parent] || {};
       const pc = (pw.cities || []).find((c) => c.city === w.city) || (pw.city === w.city ? pw : null);
-      if (pc && pc.rt && pc.outDate && pc.backDate) {
-        const i = order.findIndex((x) => x.o.d === pc.outDate && x.k.d === pc.backDate);
-        const x = i >= 0 ? order[i] : P.allDates.find((x) => x.o.d === pc.outDate && x.k.d === pc.backDate);
-        if (x) { if (i >= 0) order.splice(i, 1); order = [{ ...x, g: undefined, prevBest: true }, ...order]; cap++; }
+      // וגם הצירוף הכי זול שנמצא ב-24 השעות האחרונות (state._bp)
+      const bp = ((state._bp = state._bp || {})[w.id]);
+      const cands = [pc && pc.rt && pc.outDate && pc.backDate ? [pc.outDate, pc.backDate] : null, bp && now - new Date(bp.t) < 24 * 3600e3 ? [bp.o, bp.k] : null].filter(Boolean);
+      for (const [od, kd] of cands.reverse()) {
+        const i = order.findIndex((x) => x.o.d === od && x.k.d === kd);
+        const x = i >= 0 ? order[i] : P.allDates.find((x) => x.o.d === od && x.k.d === kd);
+        if (x && !(order[0] && order[0].prevBest && order[0].o.d === od && order[0].k.d === kd)) { if (i >= 0) order.splice(i, 1); order = [{ ...x, g: undefined, prevBest: true }, ...order]; cap++; }
       }
       let best = null, tries = 0;
       for (const x of order) {
@@ -456,6 +459,7 @@ function saveChannelStatus() {
         P.rt.push({ pr: x, r });
         if (r.status === 'OK' && (!best || r.price < best.r.price)) best = { pr: x, r };
       }
+      if (best) { const o = state._bp[w.id]; if (!o || best.r.price <= o.price || now - new Date(o.t) > 24 * 3600e3 || (o.o === best.pr.o.d && o.k === best.pr.k.d)) state._bp[w.id] = { o: best.pr.o.d, k: best.pr.k.d, price: best.r.price, t: now.toISOString() }; }
     }
     let wi = 0;
     await Promise.all(Array.from({ length: +(process.env.RT_PARALLEL || 3) }, async () => {
@@ -536,7 +540,7 @@ function saveChannelStatus() {
     if (w.target) s.under = under ? true : price > w.target + minDrop ? false : s.under;
     s.last = price;
   }
-  for (const id of Object.keys(state)) if (id !== '_sys' && !allWatches.find((w) => w.id === id)) delete state[id];
+  for (const id of Object.keys(state)) if (id !== '_sys' && id !== '_bp' && !allWatches.find((w) => w.id === id)) delete state[id];
 
   // סיכום בוקר (מ-8:00 שעון ישראל, פעם ביום) — גם סימן שהמערכת חיה
   const il = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false }).formatToParts(now);
