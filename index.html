@@ -761,9 +761,20 @@ let ADM = null;
 async function renderAdmin(force) {
   if (!ADM || force) { try { ADM = await rpc('ft_admin_list'); } catch { ADM = []; } try { $('#admInvSt').textContent = (await rpc('ft_admin_has_invite')) ? '✓ יש קוד פעיל' : '✗ עוד אין קוד — בלי קוד אי אפשר להצטרף'; } catch {} }
   $('#admList').innerHTML = !ADM.length ? '<div class="note">עוד אין משתמשים.</div>' : `<table><tr><th>משתמש</th><th>טיולים</th><th>טלגרם</th><th>וואטסאפ</th><th>מצב</th><th></th></tr>${ADM.map((u) => `<tr>
-    <td>${esc(u.name || '—')}<span class="small"><bdi dir="ltr">${esc(u.email || '')}</bdi></span></td><td>${u.trips}</td><td>${u.tg ? '✓' : '—'}</td><td>${u.whatsapp ? `<span class="ltr">${esc(u.whatsapp)}</span>${u.wa_ok ? ' ✓' : ' <span class="small">(עוד לא אישר בוואטסאפ)</span>'}` : '—'}</td>
+    <td>${esc(u.name || '—')}<span class="small"><bdi dir="ltr">${esc(u.email || '')}</bdi></span></td><td>${u.trips}</td><td>${u.tg ? '✓' : '—'}</td><td>${u.whatsapp ? `<span class="ltr">${esc(u.whatsapp)}</span>${u.wa_ok ? ' ✓' : ' <span class="small">(עוד לא אישר בוואטסאפ)</span>'}` : '—'} <button data-wa="${u.id}" data-cur="${esc(u.whatsapp || '')}" title="שינוי מספר" style="padding:2px 8px">✎</button></td>
     <td>${u.admin ? '⭐ מנהל' : u.blocked ? '⛔ חסום' : u.approved ? '✅ מאושר' : u.invited ? '⏳ ממתין לאישור' : '⏳ בלי קוד הזמנה'}</td>
     <td>${u.admin ? '' : `${!u.approved || u.blocked ? `<button data-adm="${u.id}" data-a="1" data-b="0">✅ אישור</button>` : ''} ${!u.blocked ? `<button data-adm="${u.id}" data-a="${u.approved ? 1 : 0}" data-b="1">⛔ חסימה</button>` : ''}`}</td></tr>`).join('')}</table>`;
+  document.querySelectorAll('[data-wa]').forEach((b) => b.onclick = () => {
+    const td = b.parentElement;
+    td.innerHTML = `<input class="ltr" style="width:140px" value="${b.dataset.cur}" placeholder="050-1234567"> <button data-wasave>שמירה</button> <button data-wacancel>ביטול</button>`;
+    td.querySelector('[data-wacancel]').onclick = () => renderAdmin();
+    td.querySelector('[data-wasave]').onclick = async () => {
+      const ok = await rpc('ft_admin_set_wa', { p_uid: b.dataset.wa, p_whatsapp: td.querySelector('input').value.trim() }).catch(() => false);
+      $('#admMsg').className = 'msg ' + (ok ? 'ok' : 'err');
+      $('#admMsg').textContent = ok ? '✓ המספר עודכן. אם הוא השתנה — המשתמש צריך לשלוח "שלום" מהמספר החדש ולענות "כן", ורק אז ההתראות יגיעו אליו.' : 'המספר לא נראה תקין. כותבים למשל 050-1234567.';
+      if (ok) renderAdmin(true);
+    };
+  });
   document.querySelectorAll('[data-adm]').forEach((b) => b.onclick = async () => {
     const ok = await rpc('ft_admin_set', { p_uid: b.dataset.adm, p_approved: b.dataset.a === '1', p_blocked: b.dataset.b === '1' }).catch(() => false);
     $('#admMsg').className = 'msg ' + (ok ? 'ok' : 'err'); $('#admMsg').textContent = ok ? '✓ עודכן.' : 'לא עודכן.'; renderAdmin(true);
