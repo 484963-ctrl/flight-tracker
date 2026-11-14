@@ -583,7 +583,7 @@ function saveChannelStatus() {
   if (!ONLY_NEW && ilHour >= 8 && sys.daily !== ilDate && watches.length) {
     for (const owner of [...new Set(watches.map((w) => w.owner || null))]) {
       const ws = watches.filter((w) => (w.owner || null) === owner);
-      const nm = [...new Set(ws.map((w) => w.who).filter(Boolean))], who = nm.length === 1 ? nm[0] : ownerName(owner);
+      const nm = [...new Set(ws.map((w) => w.who).filter(Boolean))], who = nm.length === 1 && ws.every((w) => w.who === nm[0]) ? nm[0] : ownerName(owner);
       const L = [`☀️ בוקר טוב${who ? ', ' + who : ''}! המחירים של הבוקר:`];
       for (const w of ws) {
         const r = wOut[w.id], pp = paxOf(w), pn = paxCount(pp);
@@ -673,7 +673,7 @@ const t24 = (s) => { const m = /(\d{1,2}):(\d\d)\s*([AP])M(\+\d)?/.exec(s || '')
 const airHe = (a) => (a && a.air && AIR_HE[a.air.split(/[,·]/)[0].trim()]) || (a && a.air) || '';
 const nights = (a, b) => Math.round((new Date(b + 'T12:00:00Z') - new Date(a + 'T12:00:00Z')) / 864e5);
 const placeOf = (w, r) => w.dest ? (w.dest.he || w.dest.name) : CITY((r && r.city) || w.city);
-const hello = (ws, fallback) => { const n = [...new Set(ws.map((w) => w.who).filter(Boolean))]; const x = n.length === 1 ? n[0] : fallback; return `☀️ שלום וברכה${x ? ', ' + x : ''}`; };
+const hello = (ws, fallback) => { const n = [...new Set(ws.map((w) => w.who).filter(Boolean))]; const x = n.length === 1 && ws.every((w) => w.who === n[0]) ? n[0] : fallback; return `☀️ שלום וברכה${x ? ', ' + x : ''}`; };
 
 // גוף ההודעה של טיול אחד. *מודגש* ו-[טקסט](קישור) — notify.js מתאים לכל ערוץ
 function tripBlock(w, r, o = {}) {
