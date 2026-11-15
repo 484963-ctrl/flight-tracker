@@ -582,9 +582,9 @@ function saveChannelStatus() {
     if (!st0.firstDone && st0.last != null) st0.firstDone = 'before'; // טיול שכבר נבדק בעבר — בלי הודעה
     if (!st0.firstDone && (price != null || wOut[w.id].none)) {
       st0.firstDone = now.toISOString();
-      const L = [hello([w], ownerName(w.owner)), `✅ הבדיקה הראשונה הסתיימה${w.title ? `: 🧳 ${w.title}` : ''}`, ''];
-      if (price == null) L.push(`✈️ ${placeOf(w)}: לא נמצאה טיסה ישירה שמתאימה להגדרות שלך בתאריכים האלה.`);
-      else L.push(tripBlock(w, wOut[w.id], { noTitle: true }));
+      const L = [hello([w], ownerName(w.owner)), '✅ הבדיקה הראשונה הסתיימה:'];
+      if (price == null) L.push(...(w.title ? [`🧳 ${w.title}`] : []), '', `✈️ ${placeOf(w)}: לא נמצאה טיסה ישירה שמתאימה להגדרות שלך בתאריכים האלה.`);
+      else L.push(tripBlock(w, wOut[w.id]).replace(/^(🧳 [^\n]*\n)?/, (t) => (t || '') + '\n'));
       L.push('', 'מעכשיו: בדיקה כל חצי שעה, והודעה על כל ירידה.' + footer());
       note(w.owner, L.join('\n'));
     }
@@ -731,13 +731,15 @@ function tripBlock(w, r, o = {}) {
   const dm = (d) => `${+d.slice(8)}.${+d.slice(5, 7)}`;
   // "ב׳ י״ג באב (16.8) 18:00–20:50" — קצר, כדי שכל דבר ייכנס בשורה בטלפון
   const leg = (d, f) => { const w0 = new Date(d + 'T12:00:00Z').getUTCDay();
-    return `${w0 === 6 ? 'שבת' : DAY[w0]} ${gem(heDay(d))} ב${heMonth(d)} (${dm(d)}) ${t24(f.dep).replace(' (למחרת)', '')}${f.arr ? '–' + t24(f.arr).replace(' (למחרת)', '+1') : ''}`; };
-  if (w.title && !o.noTitle) L.push(`*${w.title}*`);
+    return `${w0 === 6 ? 'שבת' : 'יום ' + DAY[w0]} - ${gem(heDay(d))} ב${heMonth(d)} (${dm(d)}) ${t24(f.dep).replace(' (למחרת)', '')}${f.arr ? '–' + t24(f.arr).replace(' (למחרת)', '+1') : ''}`; };
+  const dwd = (d) => { const x = new Date(d + 'T12:00:00Z').getUTCDay(); return x === 6 ? 'שבת' : 'יום ' + DAY[x]; };
+  if (w.title && !o.noTitle) L.push(`🧳 ${w.title}`);
   L.push(`✈️ ${placeOf(w, r)}, ${monthOf(od)}`);
   if (o.from != null) L.push(`🔔 ירד מ-${ils(per(o.from))} ל-${ils(per(r.price))}${pl} (${Math.round((o.from - r.price) / o.from * 100)}%-)`);
   if (o.why === 'target') L.push(`✅ מתחת ליעד שלך (${ils(per(w.target))}${pl})`);
   if (o.lowest) L.push('🏆 הכי זול שראינו');
-  L.push(`דרך ${CITY(r.city || w.city)} · ${airHe(a) || 'טיסה'} ישיר${r.rt ? '' : ' · 2 כרטיסים'}`);
+  const many = (r.cities || []).length > 1;
+  L.push(`${many ? 'הטיסה הזולה ביותר היא דרך' : 'דרך'} ${CITY(r.city || w.city)} · ${airHe(a) || 'טיסה'} ישיר${r.rt ? '' : ' · 2 כרטיסים'}`);
   L.push(`💰 *${both(per(r.price))}${pl}*`);
   if (pn > 1) L.push(`ביחד ${both(r.price)} · ${pn} נוסעים`);
   L.push(`הלוך: ${leg(od, a)}`);
@@ -746,9 +748,12 @@ function tripBlock(w, r, o = {}) {
   const cs = (r.cities || []).filter((c) => c.city !== (r.city || w.city)).sort((x, y) => (x.price ?? 1e9) - (y.price ?? 1e9));
   if (cs.length) {
     L.push('', `שאר השדות${pl}:`);
-    for (const c of cs) L.push(c.price != null
-      ? `${CITY(c.city)} ${both(per(c.price))} ${dm(c.outDate)}–${dm(c.backDate)} [·](${gfRound(c.outDate, c.backDate, cfg.origin, c.city, pp)})`
-      : `${CITY(c.city)} — ${c.none ? (c.why === 'nodirect' ? 'אין טיסה ישירה' : c.why === 'retry' ? 'לא נמצא הפעם' : 'אין לפי ההגדרות') : 'עוד נבדק'}`);
+    // קודם השדות עם מחיר (עם יום בשבוע), ואחרי שורה ריקה — אלה שאין בהם טיסה
+    for (const c of cs.filter((c) => c.price != null))
+      L.push(`${CITY(c.city)} ${both(per(c.price))} ${dwd(c.outDate)} ${dm(c.outDate)} – ${dwd(c.backDate)} ${dm(c.backDate)} [·](${gfRound(c.outDate, c.backDate, cfg.origin, c.city, pp)})`);
+    const miss = cs.filter((c) => c.price == null);
+    if (miss.length && miss.length < cs.length) L.push('');
+    for (const c of miss) L.push(`${CITY(c.city)} — ${c.none ? (c.why === 'nodirect' ? 'אין טיסה ישירה' : c.why === 'retry' ? 'לא נמצא הפעם' : 'אין לפי ההגדרות') : 'עוד נבדק'}`);
   }
   return L.join('\n');
 }
