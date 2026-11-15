@@ -263,7 +263,11 @@ const SCAN_KEY = process.env.TEXTMEBOT_APIKEY ? 'flights-scan:' + process.env.TE
 const ownerName = (owner) => (owner && USERS && USERS[owner] && USERS[owner].name) || '';
 const adminId = () => (USERS && Object.keys(USERS).find((id) => USERS[id].admin)) || null;
 // שליחה למשתמש: המנהל (או מצב ישן) — לערוצים שב-GitHub; משתמש אחר — לטלגרם ולוואטסאפ שלו
+// שבת וחג: לא שולחים. רושמים למי היו הודעות, ובמוצאי שבת שולחים לו הודעה אחת עם המצב העדכני
+let quietNow = () => false, QUIET = false;
+const QUIET_PENDING = new Set();
 async function sendTo(owner, text) {
+  if (QUIET) { QUIET_PENDING.add(owner || '-'); console.log('🕯️ נדחה למוצאי שבת:', owner || 'מנהל'); return; }
   const u = owner && USERS && USERS[owner];
   const channels = u ? (u.settings || {}).channels : undefined;
   if (!u || u.admin) return notify.send(text, { channels });
@@ -328,7 +332,9 @@ function saveChannelStatus() {
 }
 
 (async () => {
-  try { shabbatOk = (await import('./shabbat.mjs')).makeChecker({ ...(cfg.shabbat || {}), places: AIRPORTS }); } catch (e) { console.log('שבת: לא נטען —', e.message); }
+  try { const sh = await import('./shabbat.mjs'); shabbatOk = sh.makeChecker({ ...(cfg.shabbat || {}), places: AIRPORTS }); quietNow = sh.makeQuiet(); } catch (e) { console.log('שבת: לא נטען —', e.message); }
+  QUIET = quietNow();
+  if (QUIET) console.log('🕯️ שבת/חג — לא שולחים הודעות עד צאת השבת');
   await loadWatches();
   watches = watches.map(norm);
   // כמה יעדים בטיול אחד (למשל לטירול: מינכן, אינסברוק, מילאנו, ונציה) — כל יעד נבדק בנפרד, והזול נבחר
@@ -676,7 +682,7 @@ function saveChannelStatus() {
       if (u.admin) k.wa = true;
       // אישור הוואטסאפ ("✅ הוואטסאפ חובר") נשלח מיד מהפונקציה ft-wa-in, אחרי שהמשתמש עונה "כן"
       if (!k.wa && u.whatsapp) { k.wa = now.toISOString(); k.welcomed = k.welcomed || now.toISOString(); }
-      if (!k.welcomed && u.tg_chat) { k.welcomed = now.toISOString(); // ברכה בטלגרם (בוואטסאפ — מ-ft-wa-in)
+      if (!k.welcomed && u.tg_chat && !QUIET) { k.welcomed = now.toISOString(); // ברכה בטלגרם (בוואטסאפ — מ-ft-wa-in)
         await notify.send(`${hello([], u.name)}\nברוך הבא למעקב הטיסות! ✈️\nכאן תקבל התראה על כל ירידה במחיר של הטיולים שלך, וסיכום כל בוקר ב-8:00.${footer()}`, { user: true, telegram: u.tg_chat, channels: { telegram: true, whatsapp: false } }); }
     }
   }
@@ -693,6 +699,18 @@ function saveChannelStatus() {
   const td = (sys.testDoneU = sys.testDoneU || {});
   if (USERS) { /* בקשות בדיקה מהאתר — בבדיקה המהירה (quick.yml), מיד */ }
   else { const testReq = settings.testAt && settings.testAt !== sys.testDone; if (testReq) { sys.testDone = settings.testAt; await statusTo(null); } }
+  // שבת/חג: שומרים למי היו הודעות. אחרי צאת השבת — הודעה אחת לכל אחד עם המצב העדכני
+  if (!QUICK) {
+    const qp = (sys.quietPending = sys.quietPending || []);
+    if (QUIET) { for (const o of QUIET_PENDING) if (!qp.includes(o)) qp.push(o); }
+    else if (qp.length) {
+      sys.quietPending = [];
+      for (const o of qp) { const owner = o === '-' ? null : o;
+        if (owner && USERS && !USERS[owner]) continue;
+        const ws = allWatches.filter((w) => (w.owner || null) === owner);
+        if (ws.length) await sendTo(owner, statusMessage(ws, wOut, '🌙 שבוע טוב! המחירים של הטיולים שלך אחרי השבת:', ownerName(owner))); }
+    }
+  }
   // בקשת בדיקה מקובץ במאגר (test-request.json: {"at": "..."}) — למנהל
   const fileTest = rd('test-request.json', {}).at;
   if ((fileTest && fileTest !== sys.testFile) || process.env.TEST_NOTIFY) { sys.testFile = fileTest; await statusTo(adminId()); }

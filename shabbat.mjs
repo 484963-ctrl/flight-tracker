@@ -102,3 +102,24 @@ export function makeChecker({ beforeH = 3, endMin = 50, prepH = 3, places = {} }
     return true;
   };
 }
+
+// שקט בשבת וחג (לשליחת הודעות): מ-beforeMin דקות לפני השקיעה בערב שבת/חג ועד endMin דקות אחרי השקיעה במוצאי, בירושלים
+export function makeQuiet({ beforeMin = 40, endMin = 50 } = {}) {
+  const holy = new Set();
+  const now = new Date();
+  for (const e of HebrewCalendar.calendar({ start: new Date(now.getFullYear() - 1, 0, 1), end: new Date(now.getFullYear() + 2, 0, 1), il: true }))
+    if (e.getFlags() & flags.CHAG) holy.add(iso(e.getDate().greg()));
+  const isHoly = (s) => new Date(s + 'T12:00:00Z').getUTCDay() === 6 || holy.has(s);
+  const [lat, lon, tz] = [31.78, 35.22, 'Asia/Jerusalem'];
+  const sunset = (s) => { const [y, m, d] = s.split('-').map(Number); return +new Zmanim(new GeoLocation('JER', lat, lon, 0, tz), new Date(y, m - 1, d, 12), false).sunset(); };
+  const ilDate = (ms) => new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ms));
+  return function quiet(ms = Date.now()) {
+    const today = ilDate(ms);
+    for (const d of [shift(today, -1), today, shift(today, 1)]) {
+      if (!isHoly(d) || isHoly(shift(d, -1))) continue; // תחילת רצף של שבת/חג
+      let last = d; while (isHoly(shift(last, 1))) last = shift(last, 1);
+      if (ms >= sunset(shift(d, -1)) - beforeMin * 6e4 && ms < sunset(last) + endMin * 6e4) return true;
+    }
+    return false;
+  };
+}
