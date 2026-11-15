@@ -784,7 +784,7 @@ function tripBlock(w, r, o = {}) {
   if (o.why === 'target') L.push(`✅ מתחת ליעד שלך (${ils(per(w.target))}${pl})`);
   if (o.lowest) L.push('🏆 הכי זול שראינו');
   const many = (r.cities || []).length > 1;
-  L.push(`${many ? 'הטיסה הזולה ביותר היא דרך' : 'דרך'} ${CITY(r.city || w.city)} · ${airHe(a) || 'טיסה'} ישיר${r.rt ? '' : ' · 2 כרטיסים'}`);
+  L.push(`${many ? 'הטיסה הזולה ביותר היא דרך' : 'דרך'} ${CITY(r.city || w.city)} (${r.city || w.city}) · ${airHe(a) || 'טיסה'} ישיר${r.rt ? '' : ' · 2 כרטיסים'}`);
   L.push(`💰 *${both(per(r.price))}${pl}*`);
   if (pn > 1) L.push(`ביחד ${both(r.price)} · ${pn} נוסעים`);
   L.push(`הלוך: ${leg(od, a)}`);

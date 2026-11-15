@@ -149,6 +149,7 @@
   .sug button { display:block; width:100%; text-align:right; border:0; border-bottom:1px solid var(--line); border-radius:0; padding:9px 12px; font-size:15px; color:var(--ink); }
   .sug button:hover { background:var(--sky); box-shadow:none; }
   .sug small { display:block; font-size:12px; color:var(--mute); }
+  small.code { font-size:11px; font-weight:700; color:var(--mute); letter-spacing:.5px; direction:ltr; unicode-bidi:isolate; }
   .sugnone { padding:10px 12px; font-size:13px; color:var(--mute); }
   .dmap { height:320px; border-radius:12px; margin-top:10px; overflow:hidden; border:1px solid var(--line); }
   details.dest summary, details.dair summary { font-size:15px; color:var(--blue2); }
@@ -429,6 +430,25 @@ async function placeImg(name) {
   if (url) try { const keep = Object.fromEntries(Object.entries(PIMG).filter(([, v]) => v)); localStorage.setItem('flights-place-img2', JSON.stringify(keep)); } catch {}
   return url;
 }
+// שם שדה + הקוד באנגלית (למשל "וינה · VIE")
+const airChip = (p, k, on) => `<label class="chip"><input type="checkbox" data-city="${p}" value="${k}" ${on ? 'checked' : ''}> ${esc(cnameAll(k))} <small class="code">${k}</small></label>`;
+document.addEventListener('input', (e) => {
+  const inp = e.target; if (!inp.id || !inp.id.endsWith('AQ')) return;
+  const p = inp.id.slice(0, -2), q = inp.value.trim().toLowerCase(), box = $(`#${p}ASug`);
+  if (q.length < 2) { box.innerHTML = ''; return; }
+  const strip = (t) => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const qs = strip(q);
+  const hits = Object.entries(AIRP).map(([c, a]) => ({ c, a, sc: c.toLowerCase() === qs ? 0 : c.toLowerCase().startsWith(qs) ? 1 : strip(a[0]).startsWith(qs) || strip(a[4] || '').startsWith(qs) ? 2 : strip(a[0]).includes(qs) || strip(a[4] || '').includes(qs) ? 3 : 9 }))
+    .filter((x) => x.sc < 9).sort((x, y) => x.sc - y.sc).slice(0, 8);
+  box.innerHTML = hits.length ? hits.map((x) => `<button type="button" data-aadd="${p}" data-c="${x.c}"><b>${esc(x.a[0])}</b> · ${x.c}<small>${esc([...new Set([x.a[4], x.a[3].split('/').pop().replace(/_/g, ' ')].filter(Boolean))].join(' · '))}</small></button>`).join('') : '<div class="sugnone">לא נמצא שדה כזה</div>';
+});
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-aadd]'); if (!b) return;
+  const p = b.dataset.aadd, c = b.dataset.c, L_ = $(`#${p}ChipL`);
+  const ex = L_.querySelector(`input[value="${c}"]`);
+  if (ex) ex.checked = true; else L_.insertAdjacentHTML('beforeend', airChip(p, c, true));
+  $(`#${p}AQ`).value = ''; $(`#${p}ASug`).innerHTML = '';
+});
 const cnameAll = (c) => (CFG.cities && CFG.cities[c]) || (AIRP[c] && AIRP[c][0]) || c;
 function destBox(p, w) {
   if (w.dest) DEST[p] = { ...w.dest, drive: w.drive || {} }; else if (w.id) delete DEST[p];
@@ -454,7 +474,7 @@ function destList(p, checked) {
   const list = Object.entries(d.drive || {}).filter(([, t]) => t <= d.hours * 3600).sort((a, b) => a[1] - b[1]);
   if (!list.length) return `<div class="msg err">אין שדה תעופה עם טיסות ישירות מתל אביב עד ${d.hours} שעות נסיעה מ-${d.name}.</div>`;
   return `<details class="dair"><summary>🚗 ${list.length} שדות תעופה עד ${d.hours} שעות נסיעה מ-${d.name} ▾</summary>
-    <div class="chips" style="margin-top:8px">${list.map(([c, t]) => { const nd0 = L.noDirect && L.noDirect[c], nd = nd0 && (typeof nd0 !== 'object' || nd0.n >= 2); return `<label class="chip" ${nd ? 'style="opacity:.6" title="בבדיקות האחרונות לא נמצאו טיסות ישירות מתל אביב לשדה הזה"' : ''}><input type="checkbox" data-city="${p}" value="${c}" ${(checked ? checked.includes(c) : !nd) ? 'checked' : ''}> ${cnameAll(c)} · 🚗 ${hm(t)}${nd ? ' · (אין טיסות ישירות)' : ''}</label>`; }).join('')}</div></details>`;
+    <div class="chips" style="margin-top:8px">${list.map(([c, t]) => { const nd0 = L.noDirect && L.noDirect[c], nd = nd0 && (typeof nd0 !== 'object' || nd0.n >= 2); return `<label class="chip" ${nd ? 'style="opacity:.6" title="בבדיקות האחרונות לא נמצאו טיסות ישירות מתל אביב לשדה הזה"' : ''}><input type="checkbox" data-city="${p}" value="${c}" ${(checked ? checked.includes(c) : !nd) ? 'checked' : ''}> ${esc(cnameAll(c))} <small class="code">${c}</small> · 🚗 ${hm(t)}${nd ? ' · (אין טיסות ישירות)' : ''}</label>`; }).join('')}</div></details>`;
 }
 const hav = (a, b, c, d) => { const R = 6371, r = Math.PI / 180, x = Math.sin((c - a) * r / 2) ** 2 + Math.cos(a * r) * Math.cos(c * r) * Math.sin((d - b) * r / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(x)); };
 async function destCompute(p, lat, lon, name, nd) {
@@ -462,7 +482,7 @@ async function destCompute(p, lat, lon, name, nd) {
   // המפה פתוחה? עוברים למקום שנבחר ומסמנים אותו
   const mp = $(`#${p}DMap`); if (mp && mp._map) { mp._map.setView([lat, lon], 8); if (mp._mk) mp._mk.setLatLng([lat, lon]); else mp._mk = window.L_.marker([lat, lon]).addTo(mp._map); }
   m.className = 'msg'; m.textContent = '🚗 מחשב זמני נסיעה…';
-  const cand = Object.entries(AIRP).filter(([, a]) => hav(lat, lon, a[1], a[2]) <= 8 * 110 + 50);
+  const cand = Object.entries(AIRP).map(([c, a]) => [c, a, hav(lat, lon, a[1], a[2])]).filter((x) => x[2] <= 8 * 110 + 50).sort((x, y) => x[2] - y[2]).slice(0, 99).map(([c, a]) => [c, a]);
   const drive = {};
   if (cand.length) {
     const coords = [[lon, lat], ...cand.map(([, a]) => [a[2], a[1]])].map((x) => x.join(',')).join(';');
@@ -683,7 +703,8 @@ function tripForm(p, w = {}) {
     </div>
     <div class="mode"><button type="button" data-mode="${p}" data-m="air" class="${w.dest ? '' : 'on'}">✈️ אני יודע לאיזה שדה תעופה</button><button type="button" data-mode="${p}" data-m="place" class="${w.dest ? 'on' : ''}">🎯 אני יודע לאן אני נוסע<small>והמערכת תמצא את השדות הקרובים</small></button></div>
     <fieldset id="${p}Chips" style="${w.dest ? 'display:none' : ''}"><legend>✈️ לאיזה שדה? אפשר לסמן כמה — והזול ייבחר</legend>
-      <div class="chips">${Object.entries(CFG.cities || {}).map(([k, v]) => `<label class="chip"><input type="checkbox" data-city="${p}" value="${k}" ${citiesOfW(w).includes(k) || (!w.id && !citiesOfW(w).length && k === 'MUC') ? 'checked' : ''}> ${v}</label>`).join('')}</div></fieldset>
+      <div class="chips" id="${p}ChipL">${[...new Set([...Object.keys(CFG.cities || {}), ...(w.dest ? [] : citiesOfW(w))])].map((k) => airChip(p, k, citiesOfW(w).includes(k) || (!w.id && !citiesOfW(w).length && k === 'MUC'))).join('')}</div>
+      <div style="position:relative;margin-top:10px;max-width:420px"><input id="${p}AQ" autocomplete="off" placeholder="➕ עוד שדה: כותבים שם או קוד (למשל JFK, וינה, Linz)" style="width:100%"><div class="sug" id="${p}ASug"></div></div></fieldset>
     ${destBox(p, w)}
     <fieldset><legend>🛫 הלוך</legend><div class="row">
       ${winFields(p, 'WO', ...winOf(w, 'out'))}
@@ -791,7 +812,7 @@ function card(w, can) {
         const air = c.outAir ? [...new Set([c.outAir, c.backAir].filter(Boolean))].join(' / ') : '';
         const sd = (d) => `${dayName(d).replace('יום ', '')} ${heD(d)}`;
         const v = c.price != null ? (pc > 1 ? Math.round(c.price / pc) : c.price) : null;
-        const inner = `<span class="cn">${star ? '⭐ ' : ''}${cname(c.city)}${w.drive && w.drive[c.city] ? ` <small>🚗 ${hm(w.drive[c.city])}</small>` : ''}</span>
+        const inner = `<span class="cn">${star ? '⭐ ' : ''}${cname(c.city)} <small class="code">${c.city}</small>${w.drive && w.drive[c.city] ? ` <small>🚗 ${hm(w.drive[c.city])}</small>` : ''}</span>
           <span class="cp">${v != null ? `${ils(v)}${usd(v) ? ` <small><bdi dir="ltr">≈${usd(v)}</bdi></small>` : ''}` : c.none ? '—' : '⏳'}</span>
           <span class="cd" title="${c.price != null ? `${dayName(c.outDate)} ${heD(c.outDate)} ← ${dayName(c.backDate)} ${heD(c.backDate)}${air ? ' · ' + air : ''}` : ''}">${c.price != null ? `${sd(c.outDate)} ← ${sd(c.backDate)}` : c.none ? (c.why === 'nodirect' ? '✈️ אין טיסות ישירות מתל אביב' : c.why === 'retry' ? 'לא נמצאו טיסות בבדיקה הזו — ייבדק שוב' : 'יש ישירות, לא לפי ההגדרות שלך') : 'בודק…'}</span>`;
         const links = `<span class="cl">${c.price != null ? `<a href="${gfRound(c.outDate, c.backDate, CFG.origin || 'TLV', c.city, px)}" target="_blank" title="לראות את הטיסות בגוגל טיסות">✈️<span class="t"> טיסות</span></a>` : ''}</span>`;
