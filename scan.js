@@ -583,8 +583,8 @@ function saveChannelStatus() {
     if (!st0.firstDone && (price != null || wOut[w.id].none)) {
       st0.firstDone = now.toISOString();
       const L = [hello([w], ownerName(w.owner)), '✅ הבדיקה הראשונה הסתיימה:'];
-      if (price == null) L.push(...(w.title ? [`🧳 ${w.title}`] : []), '', `✈️ ${placeOf(w)}: לא נמצאה טיסה ישירה שמתאימה להגדרות שלך בתאריכים האלה.`);
-      else L.push(tripBlock(w, wOut[w.id]).replace(/^(🧳 [^\n]*\n)?/, (t) => (t || '') + '\n'));
+      if (price == null) L.push(...(w.title ? [`🧳 ${w.title}`] : []), '', searchSummary(w), '', `✈️ ${placeOf(w)}: לא נמצאה טיסה ישירה שמתאימה להגדרות שלך בתאריכים האלה.`);
+      else L.push(tripBlock(w, wOut[w.id]).replace(/^(🧳 [^\n]*\n)?/, (t) => (t || '') + '\n' + searchSummary(w) + '\n\n'));
       L.push('', 'מעכשיו: בדיקה כל חצי שעה, והודעה על כל ירידה.' + footer());
       note(w.owner, L.join('\n'));
     }
@@ -723,6 +723,32 @@ const airHe = (a) => (a && a.air && AIR_HE[a.air.split(/[,·]/)[0].trim()]) || (
 const nights = (a, b) => Math.round((new Date(b + 'T12:00:00Z') - new Date(a + 'T12:00:00Z')) / 864e5);
 const placeOf = (w, r) => w.dest ? (w.dest.he || w.dest.name) : CITY((r && r.city) || w.city);
 const hello = (ws, fallback) => { const n = [...new Set(ws.map((w) => w.who).filter(Boolean))]; const x = n.length === 1 && ws.every((w) => w.who === n[0]) ? n[0] : fallback; return `☀️ שלום וברכה${x ? ', ' + x : ''}`; };
+
+// "🔎 מה חיפשנו" — תאריכים, גמישות, לילות, נוסעים, חברה, שבת, שדות (בהודעה "הבדיקה הראשונה הסתיימה")
+function searchSummary(w) {
+  const dwd = (d) => { const x = new Date(d + 'T12:00:00Z').getUTCDay(); return x === 6 ? 'שבת' : 'יום ' + DAY[x]; };
+  const dm = (d) => `${+d.slice(8, 10)}.${+d.slice(5, 7)}`;
+  const hh = (h) => `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.round((h % 1) * 60)).padStart(2, '0')}`;
+  const win = (F, T, hours) => {
+    if (!F) return '';
+    const f = F.slice(0, 10); let t = (T || F).slice(0, 10), tt = (T || '').slice(11, 16); const ft = F.slice(11, 16);
+    if (tt === '00:00' && t > f) { const d = new Date(t + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() - 1); t = d.toISOString().slice(0, 10); tt = ''; } // "עד 00:00" = עד סוף היום הקודם
+    let x = f === t ? `${dwd(f)} ${dm(f)}${ft && ft !== '00:00' ? ` (מ-${ft})` : ''}${tt && tt < '23:59' ? ` (עד ${tt})` : ''}`
+      : `${dwd(f)} ${dm(f)}${ft && ft !== '00:00' ? ` (מ-${ft})` : ''} עד ${dwd(t)} ${dm(t)}${tt && tt < '23:59' ? ` (עד ${tt})` : ''}`;
+    if (Array.isArray(hours)) x += ` · המראה ${hh(hours[0])}–${hh(hours[1])}`;
+    return x;
+  };
+  const pp = paxOf(w), pn = paxCount(pp), L = ['🔎 מה חיפשנו:'];
+  L.push(`יציאה: ${win(w.outFrom || w.out, w.outTo, w.outHours)}`);
+  L.push(`חזרה: ${win(w.backFrom || w.back, w.backTo, w.backHours)}`);
+  const n1 = +w.nightsMin || 0, n2 = +w.nightsMax || 0;
+  const nightsTxt = n1 && n2 ? (n1 === n2 ? `${n1} לילות` : `${n1}–${n2} לילות`) : n1 ? `לפחות ${n1} לילות` : n2 ? `עד ${n2} לילות` : '';
+  L.push([nightsTxt, paxText(pp), `${airLabel(w)} ישיר`, w.noShabbat !== false ? 'בלי שבת וחג' : ''].filter(Boolean).join(' · '));
+  const cs = [...new Set((Array.isArray(w.cities) && w.cities.length ? w.cities : [w.city]).filter(Boolean))];
+  L.push(w.dest && w.dest.hours ? `${cs.length} שדות, עד ${w.dest.hours} שעות נסיעה מ${w.dest.he || w.dest.name}` : `יעדים: ${cs.map(CITY).join(', ')}`);
+  if (w.target) L.push(`יעד: ${ils(Math.round(w.target / pn))}${pn > 1 ? ' לנוסע' : ''}`);
+  return L.join('\n');
+}
 
 // גוף ההודעה של טיול אחד. *מודגש* ו-[טקסט](קישור) — notify.js מתאים לכל ערוץ
 function tripBlock(w, r, o = {}) {
