@@ -38,18 +38,20 @@ jobs:
           git config user.name "flight-bot"
           git config user.email "flight-bot@users.noreply.github.com"
           end=$((SECONDS + 5*3600 + 20*60))
-          sig() { node sig.js 2>/dev/null || echo x; }
+          sig() { timeout 60 node sig.js 2>/dev/null || echo x; }
+          echo "מתחיל $(date -u +%H:%M:%S) UTC"
           last=start
           while [ $SECONDS -lt $end ]; do
             now=$(sig)
             if [ "$now" != "x" ] && [ "$now" != "$last" ]; then
               echo "=== בדיקה מהירה $(date -u +%H:%M:%S) UTC"
-              git pull -q --rebase -X theirs origin main || echo "git pull נכשל"
-              QUICK=1 node scan.js || echo "הבדיקה המהירה נכשלה"
+              git rebase --abort 2>/dev/null || true
+              git pull -q --rebase -X theirs origin main || { echo "git pull נכשל — מאפסים לגרסה של השרת"; git fetch -q origin main && git reset -q --hard origin/main; }
+              timeout 25m env QUICK=1 node scan.js || echo "הבדיקה המהירה נכשלה או לקחה יותר מדי זמן"
               git add data/quick.json data/state-quick.json 2>/dev/null || true
               if ! git diff --cached --quiet; then
                 git commit -q -m "בדיקה מהירה (טיול חדש)"
-                for j in 1 2 3 4; do git pull -q --rebase -X theirs origin main && git push -q && break; sleep 5; done
+                for j in 1 2 3 4; do git pull -q --rebase -X theirs origin main && git push -q && break; git rebase --abort 2>/dev/null || true; sleep 5; done
               fi
               last=$now
             fi
