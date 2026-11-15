@@ -459,6 +459,8 @@ function destList(p, checked) {
 const hav = (a, b, c, d) => { const R = 6371, r = Math.PI / 180, x = Math.sin((c - a) * r / 2) ** 2 + Math.cos(a * r) * Math.cos(c * r) * Math.sin((d - b) * r / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(x)); };
 async function destCompute(p, lat, lon, name, nd) {
   const hours = +$(`#${p}DH`).value, m = $(`#${p}DMsg`);
+  // המפה פתוחה? עוברים למקום שנבחר ומסמנים אותו
+  const mp = $(`#${p}DMap`); if (mp && mp._map) { mp._map.setView([lat, lon], 8); if (mp._mk) mp._mk.setLatLng([lat, lon]); else mp._mk = window.L_.marker([lat, lon]).addTo(mp._map); }
   m.className = 'msg'; m.textContent = '🚗 מחשב זמני נסיעה…';
   const cand = Object.entries(AIRP).filter(([, a]) => hav(lat, lon, a[1], a[2]) <= 8 * 110 + 50);
   const drive = {};
@@ -595,10 +597,11 @@ document.addEventListener('click', async (e) => {
   const d = DEST[p];
   const map = window.L_.map(el).setView(d ? [d.lat, d.lon] : [46.6, 10.5], d ? 9 : 5);
   window.L_.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(map);
-  el._map = map; let mk = null;
+  el._map = map;
+  if (d) el._mk = window.L_.marker([d.lat, d.lon]).addTo(map);
   map.on('click', async (ev) => {
     const { lat, lng } = ev.latlng;
-    if (mk) mk.setLatLng(ev.latlng); else mk = window.L_.marker(ev.latlng).addTo(map);
+    if (el._mk) el._mk.setLatLng(ev.latlng); else el._mk = window.L_.marker(ev.latlng).addTo(map);
     const m = $(`#${p}DMsg`); m.className = 'msg'; m.textContent = '📍 מזהה את המקום…';
     const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&zoom=14&namedetails=1&accept-language=en&lat=${lat}&lon=${lng}`).then((x) => x.json()).catch(() => null);
     const a = (r && r.address) || {};
