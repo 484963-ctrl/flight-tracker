@@ -107,6 +107,7 @@
   td.best { background:var(--gold); font-weight:800; }
   .sat td { color:#aaa; }
   .small { font-size:12px; color:var(--mute); display:block; }
+  button.exact.on { background:var(--blue, #1d4ed8); color:#fff; border-color:transparent; }
   .ltr { direction:ltr; unicode-bidi:isolate; display:inline-block; }
   a.btn { display:inline-block; margin-top:6px; padding:8px 14px; border-radius:10px; background:#2aabee; color:#fff; font-weight:700; text-decoration:none; }
   #admList table { width:100%; border-collapse:collapse; font-size:14px; } #admList td, #admList th { padding:6px; border-bottom:1px solid #eee; text-align:right; }
@@ -469,26 +470,42 @@ function winOf(w, leg) {
 }
 const winText = (F, T) => { const d = (x) => `${dayName(x.slice(0, 10)).replace('יום ', '')} ${heD(x.slice(0, 10))} ${x.slice(11, 16)}`; return `${d(F)} – ${d(T)}`; };
 const isExactDay = (F, T) => F && T && F.slice(0, 10) === T.slice(0, 10) && F.slice(11) === '00:00' && T.slice(11) >= '23:59';
+// "בלי גמישות" (מתג): תאריך אחד במקום "החל מ / עד". השדות "החל מ/עד" נשארים (מוסתרים) — מהם נקרא הטיול
 function winFields(p, k, F, T) {
   const dw = (v) => v ? dayName(v.slice(0, 10)) : '';
-  return `<label>החל מ (תאריך ושעה) <b class="dow" id="${p}${k}FD">${dw(F)}</b><input type="datetime-local" id="${p}${k}F" value="${F}"></label>
-    <label>עד (תאריך ושעה) <b class="dow" id="${p}${k}TD">${dw(T)}</b><input type="datetime-local" id="${p}${k}T" value="${T}"></label>
-    <button type="button" data-exact="${p}${k}" title="כל היום של התאריך ב'החל מ', בלי גמישות">📅 בלי גמישות</button>`;
+  const ex = !!isExactDay(F, T);
+  return `<span id="${p}${k}R" style="display:${ex ? 'none' : 'contents'}"><label>החל מ (תאריך ושעה) <b class="dow" id="${p}${k}FD">${dw(F)}</b><input type="datetime-local" id="${p}${k}F" value="${F}"></label>
+    <label>עד (תאריך ושעה) <b class="dow" id="${p}${k}TD">${dw(T)}</b><input type="datetime-local" id="${p}${k}T" value="${T}"></label></span>
+    <label id="${p}${k}1" style="display:${ex ? '' : 'none'}">תאריך <b class="dow" id="${p}${k}OD">${dw(F)}</b><input type="date" data-one="${p}${k}" id="${p}${k}O" value="${(F || '').slice(0, 10)}"></label>
+    <button type="button" class="exact${ex ? ' on' : ''}" data-exact="${p}${k}" title="תאריך אחד, כל היום — בלי גמישות">📅 בלי גמישות</button>`;
 }
 // יום בשבוע ליד כל שדה תאריך
-const dowRefresh = () => document.querySelectorAll('input[type=datetime-local]').forEach((x) => { const d = document.getElementById(x.id + 'D'); if (d) d.textContent = x.value ? dayName(x.value.slice(0, 10)) : ''; });
-document.addEventListener('input', (e) => { if (e.target.type === 'datetime-local') dowRefresh(); });
+const dowRefresh = () => document.querySelectorAll('input[type=datetime-local], input[data-one]').forEach((x) => { const d = document.getElementById(x.id + 'D'); if (d) d.textContent = x.value ? dayName(x.value.slice(0, 10)) : ''; });
+document.addEventListener('input', (e) => { if (e.target.type === 'datetime-local' || e.target.dataset.one) dowRefresh(); });
 document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-exact]'); if (!b) return;
-  const id = b.dataset.exact, f = $(`#${id}F`), t = $(`#${id}T`);
-  const d = (f.value || t.value || '').slice(0, 10); if (!d) { f.focus(); return; }
-  f.value = d + 'T00:00'; t.value = d + 'T23:59'; dowRefresh();
+  const id = b.dataset.exact, f = $(`#${id}F`), t = $(`#${id}T`), one = $(`#${id}O`);
+  const on = !b.classList.contains('on');
+  b.classList.toggle('on', on);
+  $(`#${id}R`).style.display = on ? 'none' : 'contents';
+  $(`#${id}1`).style.display = on ? '' : 'none';
+  const d = (on ? (f.value || t.value) : one.value || f.value || '').slice(0, 10);
+  if (d) { f.value = d + 'T00:00'; t.value = d + 'T23:59'; one.value = d; }
+  if (on && !d) one.focus();
+  dowRefresh();
+});
+// תאריך אחד ← כל היום של אותו תאריך (ומפעיל את המילוי האוטומטי של החזור)
+document.addEventListener('change', (e) => {
+  const id = e.target.dataset && e.target.dataset.one; if (!id || !e.target.value) return;
+  const f = $(`#${id}F`), t = $(`#${id}T`), d = e.target.value;
+  f.value = d + 'T00:00'; t.value = d + 'T23:59';
+  f.dispatchEvent(new Event('change', { bubbles: true }));
 });
 document.addEventListener('change', (e) => {
   // בחרו "החל מ" — אם "עד" ריק או לפניו, ממלאים את סוף אותו יום
   const m = /^(.+)(WO|WB)F$/.exec(e.target.id || ''); if (!m) return;
   const t = $(`#${m[1]}${m[2]}T`); if (!t.value || t.value <= e.target.value) t.value = e.target.value.slice(0, 10) + 'T23:59';
-  if (m[2] === 'WO') { const bf = $(`#${m[1]}WBF`), bt = $(`#${m[1]}WBT`); if (bf && !bf.value) { const d = new Date(Date.parse(e.target.value.slice(0, 10) + 'T00:00:00Z') + 7 * 864e5).toISOString().slice(0, 10); bf.value = d + 'T00:00'; bt.value = d + 'T23:59'; } }
+  if (m[2] === 'WO') { const bf = $(`#${m[1]}WBF`), bt = $(`#${m[1]}WBT`); if (bf && !bf.value) { const d = new Date(Date.parse(e.target.value.slice(0, 10) + 'T00:00:00Z') + 7 * 864e5).toISOString().slice(0, 10); bf.value = d + 'T00:00'; bt.value = d + 'T23:59'; const bo = $(`#${m[1]}WBO`); if (bo) bo.value = d; } }
   dowRefresh();
 });
 
