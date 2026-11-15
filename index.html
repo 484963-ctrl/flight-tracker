@@ -315,7 +315,7 @@ function render() {
   bindCards();
   renderStats();
   // תמונות של מקומות שעוד לא נטענו
-  const miss = W.filter((w) => w.dest && !w.dest.img && !(w.dest.name in PIMG));
+  const miss = W.filter((w) => w.dest && !(w.dest.name in PIMG));
   if (miss.length) Promise.all(miss.map((w) => placeImg(w.dest.name))).then(() => render());
   renderChannels(can);
   renderOverview();
@@ -345,7 +345,7 @@ const flexSel = (id, [b, a]) => ['B', 'A'].map((k, i) => `<label>${i ? 'גמיש
 const DEST = {}, P_ND = {}; // לכל טופס: { name, lat, lon, hours, drive: { CODE: שניות } }
 const hm = (sec) => `${Math.floor(sec / 3600)}:${String(Math.round(sec % 3600 / 60)).padStart(2, '0')} שעות`;
 // תמונה של המקום עצמו (למשל Galtür) — מוויקיפדיה, שמורה בדפדפן
-const PIMG = (() => { try { return JSON.parse(localStorage.getItem('flights-place-img') || '{}'); } catch { return {}; } })();
+const PIMG = (() => { try { return JSON.parse(localStorage.getItem('flights-place-img2') || '{}'); } catch { return {}; } })();
 // שם המקום בעברית: מ-OpenStreetMap (name:he) או מוויקיפדיה העברית; אפשר לתקן בטופס
 async function placeHe(name, nd) {
   if (nd && nd['name:he']) return nd['name:he'];
@@ -381,20 +381,41 @@ function translit(name) {
   }).join('');
 }
 const destLabel = (d) => d ? (d.he && d.he !== d.name ? `${d.he} - ${d.name}` : d.name) : '';
+// תמונה של המקום: תמונה אחת רחבה (לא קולאז׳ ולא לאורך). קודם התמונה של הערך בוויקיפדיה,
+// ואם היא קולאז׳/צרה — התמונה הראשית מוויקינתונים, ואחריה תמונת הבאנר של ויקימסע
+const goodFile = async (file) => {
+  try {
+    const d = await fetch(`https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&prop=categories|imageinfo&iiprop=size&cllimit=50&titles=File:${encodeURIComponent(file)}`).then((r) => r.json());
+    const p = Object.values((d.query && d.query.pages) || {})[0]; if (!p || !p.imageinfo) return false;
+    const { width, height } = p.imageinfo[0];
+    const cats = (p.categories || []).map((c) => c.title).join('|');
+    return width >= height * 1.15 && !/montage|collage|composite|mosaic|photomontage/i.test(cats) && !/montage|collage|\.svg|Wappen|Coat_of_arms|Karte|_map|locator/i.test(file);
+  } catch { return false; }
+};
+const fileUrl = (file) => `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(file)}?width=1280`;
 async function placeImg(name) {
   if (!name) return null;
   if (name in PIMG) return PIMG[name];
-  let url = null;
+  let url = null, qid = null;
   for (const lang of ['en', 'de', 'he', 'it', 'fr']) {
     try {
-      const d = await fetch(`https://${lang}.wikipedia.org/w/api.php?action=query&format=json&origin=*&prop=pageimages&piprop=thumbnail&pithumbsize=1000&redirects=1&titles=${encodeURIComponent(name)}`).then((r) => r.json());
+      const d = await fetch(`https://${lang}.wikipedia.org/w/api.php?action=query&format=json&origin=*&prop=pageimages|pageprops&piprop=name&redirects=1&titles=${encodeURIComponent(name)}`).then((r) => r.json());
       const pg = Object.values((d.query && d.query.pages) || {})[0];
-      const src = pg && pg.thumbnail && pg.thumbnail.source;
-      if (src && !/\.svg|Wappen|Coat_of_arms|Karte|_map|locator/i.test(src)) { url = src; break; }
+      if (!pg || pg.missing !== undefined) continue;
+      qid = qid || (pg.pageprops && pg.pageprops.wikibase_item);
+      if (pg.pageimage && await goodFile(pg.pageimage)) { url = fileUrl(pg.pageimage); break; }
+      if (qid) break;
     } catch {}
   }
+  if (!url && qid) try {
+    const w = await fetch(`https://www.wikidata.org/wiki/Special:EntityData/${qid}.json`).then((r) => r.json());
+    const cl = (w.entities[qid] || {}).claims || {};
+    for (const f of [...(cl.P18 || []), ...(cl.P948 || [])].map((x) => x.mainsnak && x.mainsnak.datavalue && x.mainsnak.datavalue.value).filter(Boolean))
+      if (await goodFile(f)) { url = fileUrl(f); break; }
+  } catch {}
   PIMG[name] = url;
-  try { localStorage.setItem('flights-place-img', JSON.stringify(PIMG)); } catch {}
+  // נשמר בדפדפן רק כשנמצאה תמונה — אם לא נמצאה (למשל תקלת רשת), ננסה שוב בפעם הבאה
+  if (url) try { const keep = Object.fromEntries(Object.entries(PIMG).filter(([, v]) => v)); localStorage.setItem('flights-place-img2', JSON.stringify(keep)); } catch {}
   return url;
 }
 const cnameAll = (c) => (CFG.cities && CFG.cities[c]) || (AIRP[c] && AIRP[c][0]) || c;
@@ -652,7 +673,7 @@ function card(w, can) {
         const links = `<span class="cl">${c.price != null ? `<a href="${gfRound(c.outDate, c.backDate, CFG.origin || 'TLV', c.city, px)}" target="_blank" title="לראות את הטיסות בגוגל טיסות">✈️<span class="t"> טיסות</span></a>` : ''}</span>`;
         return `<div class="crow ${star ? 'best' : ''}">${inner}${links}</div>`; }).join('')}</div>` : '';
   return `<div class="card ${hit ? 'hit' : ''}">
-    <div class="photo" style="background-image:url(${w.dest && (w.dest.img || PIMG[w.dest.name]) ? (w.dest.img || PIMG[w.dest.name]) : `img/${img}.jpg`})">
+    <div class="photo" style="background-image:url(${w.dest && (w.dest.name in PIMG ? PIMG[w.dest.name] : w.dest.img) ? (w.dest.name in PIMG ? PIMG[w.dest.name] : w.dest.img) : `img/${w.dest ? 'other' : img}.jpg`})">
       ${w.title ? `<div class="ttl">🧳 ${esc(w.title)}</div>` : ''}
       ${per != null ? `<div class="pchip"><b>${ils(per)}</b><span>${pc > 1 ? 'לנוסע' : 'הלוך-חזור'}${w.dest || many ? `<br>✈️ דרך ${cname(cityNow)}` : ''}</span></div>` : ''}
       ${hit ? '<div class="ribbon">✅ מתחת ליעד!</div>' : ''}
