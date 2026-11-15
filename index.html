@@ -12,8 +12,8 @@
           --blue:#1450b8; --blue2:#0b3b8c; --sky:#e8f0ff; --green:#0c8a4c; --greenbg:#e3f7ec; --red:#c8372d; --gold:#fff3c4;
           --shadow:0 6px 24px rgba(20,40,90,.08), 0 1px 3px rgba(20,40,90,.06); --r:20px; }
   * { box-sizing:border-box; }
-  body { margin:0; font-family:"Heebo", "Segoe UI", Arial, sans-serif; background:var(--bg); color:var(--ink); font-size:16px; }
-  .hero { position:relative; min-height:290px; color:#fff; display:flex; align-items:flex-end;
+  body { margin:0; font-family:"Heebo", "Segoe UI", Arial, sans-serif; background:radial-gradient(1200px 500px at 85% 0%, #e6eeff 0%, rgba(230,238,255,0) 60%), var(--bg); color:var(--ink); font-size:16px; }
+  .hero { position:relative; min-height:340px; border-radius:0 0 28px 28px; overflow:hidden; box-shadow:0 10px 30px rgba(8,30,80,.18); color:#fff; display:flex; align-items:flex-end;
           background:linear-gradient(180deg, rgba(8,30,80,.15) 0%, rgba(8,30,80,.25) 45%, rgba(8,30,80,.85) 100%), url(img/hero.jpg) center 40%/cover; }
   .hero .in { width:100%; max-width:1100px; margin:0 auto; padding:22px 16px 26px; }
   .hero .top { position:absolute; top:14px; left:0; right:0; max-width:1100px; margin:0 auto; padding:0 16px; display:flex; justify-content:flex-end; }
@@ -47,19 +47,31 @@
   .sec { display:flex; align-items:center; gap:10px; margin:28px 0 0; font-size:22px; font-weight:800; }
   .cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(330px, 1fr)); gap:18px; margin-top:14px; }
   .card { background:var(--card); border-radius:var(--r); overflow:hidden; position:relative; box-shadow:var(--shadow); border:2px solid transparent; transition:transform .2s, box-shadow .2s; }
-  .card:hover { transform:translateY(-2px); box-shadow:0 12px 32px rgba(20,40,90,.14); }
+  .card:hover { transform:translateY(-3px); box-shadow:0 16px 40px rgba(20,40,90,.18); }
+  .card:hover .photo { background-size:108%; }
   .card.hit { border-color:var(--green); }
-  .photo { height:170px; background-size:cover; background-position:center; position:relative; display:flex; align-items:flex-end; }
-  .photo::after { content:""; position:absolute; inset:0; background:linear-gradient(180deg, rgba(0,0,0,0) 35%, rgba(5,20,50,.78) 100%); }
-  .photo .cap { position:relative; z-index:1; padding:12px 16px; color:#fff; width:100%; }
-  .city { font-size:28px; font-weight:900; line-height:1.1; text-shadow:0 2px 10px rgba(0,0,0,.4); }
-  .photo .air { color:#fff; opacity:.92; font-size:14px; }
-  .ttl { display:inline-block; background:rgba(255,255,255,.92); color:var(--blue2); font-weight:800; font-size:15px; padding:3px 10px; border-radius:999px; margin-bottom:6px; text-shadow:none; }
-  .ribbon { position:absolute; top:12px; right:12px; z-index:1; background:var(--green); color:#fff; font-weight:800; font-size:14px; padding:5px 12px; border-radius:999px; box-shadow:0 2px 8px rgba(0,0,0,.25); }
+  /* התמונה גדולה ופתוחה; הטקסט רק בתחתית, על פס כהה עדין */
+  .photo { height:250px; background-size:cover; background-position:center; position:relative; display:flex; align-items:flex-end; transition:background-size .4s; }
+  .photo::after { content:""; position:absolute; inset:0; background:linear-gradient(180deg, rgba(0,0,0,.18) 0%, rgba(0,0,0,0) 22%, rgba(0,0,0,0) 55%, rgba(5,15,40,.72) 100%); }
+  .photo .cap { position:relative; z-index:1; padding:12px 16px 14px; color:#fff; width:100%; }
+  .city { font-size:30px; font-weight:900; line-height:1.05; text-shadow:0 2px 12px rgba(0,0,0,.55); letter-spacing:-.3px; }
+  .photo .air { display:inline-block; margin-top:6px; color:#fff; font-size:13px; font-weight:500; background:rgba(10,20,45,.45); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); padding:3px 10px; border-radius:999px; }
+  .ttl { position:absolute; top:12px; right:12px; z-index:2; background:rgba(255,255,255,.94); color:var(--blue2); font-weight:800; font-size:14px; padding:4px 12px; border-radius:999px; box-shadow:0 2px 10px rgba(0,0,0,.18); max-width:calc(100% - 150px); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pchip { position:absolute; top:12px; left:12px; z-index:2; background:rgba(10,20,45,.62); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); color:#fff; border-radius:14px; padding:6px 12px; line-height:1.1; text-align:center; box-shadow:0 4px 14px rgba(0,0,0,.25); }
+  .pchip b { display:block; font-size:22px; font-weight:900; letter-spacing:-.5px; }
+  .pchip span { font-size:11.5px; opacity:.9; }
+  .card.hit .pchip { background:rgba(12,138,76,.88); }
+  .ribbon { position:absolute; bottom:14px; left:12px; z-index:2; background:var(--green); color:#fff; font-weight:800; font-size:14px; padding:5px 12px; border-radius:999px; box-shadow:0 2px 8px rgba(0,0,0,.25); }
+  .dchip { display:inline-flex; align-items:center; gap:6px; background:var(--sky); color:var(--blue2); font-weight:700; font-size:15px; padding:6px 12px; border-radius:12px; }
+  details.more { margin-top:12px; border-top:1px solid var(--line); padding-top:8px; }
+  details.more > summary { list-style:none; font-size:14px; font-weight:700; color:var(--blue); padding:4px 0; }
+  details.more > summary::-webkit-details-marker { display:none; }
+  details.more > summary::after { content:" ▾"; }
+  details.more[open] > summary::after { content:" ▴"; }
   .cb { padding:14px 18px 16px; }
   .air { font-size:14px; color:var(--mute); }
   .dates { font-size:16px; font-weight:500; }
-  .price { font-size:48px; font-weight:900; color:var(--blue); margin:6px 0 4px; line-height:1.05; letter-spacing:-1px; }
+  .price { font-size:44px; font-weight:900; color:var(--blue); margin:6px 0 4px; line-height:1.05; letter-spacing:-1px; }
   .card.hit .price { color:var(--green); }
   .tot { font-size:17px; margin:0 0 8px; color:var(--ink); }
   .tot b { font-size:20px; }
@@ -90,8 +102,8 @@
   .crow .cd { color:var(--mute); font-size:12px; overflow:hidden; text-overflow:ellipsis; }
   @container (max-width: 380px) { .crow .cl .t { display:none; } .crow small { font-size:10px; } }
   .crow small { font-size:11px; color:var(--mute); font-weight:500; }
-  .gbtn { display:block; text-align:center; margin-top:10px; padding:10px; border-radius:12px; background:var(--sky); color:var(--blue2) !important; font-weight:700; text-decoration:none; }
-  .gbtn:hover { background:#dce8ff; }
+  .gbtn { display:block; text-align:center; margin-top:12px; padding:11px; border-radius:14px; background:linear-gradient(135deg, var(--blue), var(--blue2)); color:#fff !important; font-weight:800; text-decoration:none; box-shadow:0 4px 14px rgba(20,80,184,.25); }
+  .gbtn:hover { filter:brightness(1.08); }
   .low { font-size:14px; color:var(--mute); margin-top:6px; }
   svg.sp { width:100%; height:60px; margin-top:8px; }
   .tools { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; border-top:1px solid var(--line); padding-top:8px; }
@@ -110,6 +122,7 @@
   button.exact.on { background:var(--blue, #1d4ed8); color:#fff; border-color:transparent; }
   .ltr { direction:ltr; unicode-bidi:isolate; display:inline-block; }
   a.btn { display:inline-block; margin-top:6px; padding:8px 14px; border-radius:10px; background:#2aabee; color:#fff; font-weight:700; text-decoration:none; }
+  #admList { overflow-x:auto; }
   #admList table { width:100%; border-collapse:collapse; font-size:14px; } #admList td, #admList th { padding:6px; border-bottom:1px solid #eee; text-align:right; }
   .tf { display:grid; gap:12px; }
   .tf label { display:flex; flex-direction:column; gap:5px; font-size:14px; color:var(--mute); font-weight:500; }
@@ -640,27 +653,31 @@ function card(w, can) {
         return `<div class="crow ${star ? 'best' : ''}">${inner}${links}</div>`; }).join('')}</div>` : '';
   return `<div class="card ${hit ? 'hit' : ''}">
     <div class="photo" style="background-image:url(${w.dest && (w.dest.img || PIMG[w.dest.name]) ? (w.dest.img || PIMG[w.dest.name]) : `img/${img}.jpg`})">
+      ${w.title ? `<div class="ttl">🧳 ${esc(w.title)}</div>` : ''}
+      ${per != null ? `<div class="pchip"><b>${ils(per)}</b><span>${pc > 1 ? 'לנוסע' : 'הלוך-חזור'}${w.dest || many ? `<br>✈️ דרך ${cname(cityNow)}` : ''}</span></div>` : ''}
       ${hit ? '<div class="ribbon">✅ מתחת ליעד!</div>' : ''}
-      <div class="cap">${w.title ? `<div class="ttl">🧳 ${esc(w.title)}</div>` : ''}${w.dest
-        ? `<div class="city">🎯 ${destLabel(w.dest)}</div><div class="air">✈️ הכי זול: ${cname(cityNow)}${dr(cityNow)}${many ? ` · מבין ${citiesOfW(w).length} שדות` : ''} · ${air} · 🎫 ${paxText(px)}</div>`
-        : `<div class="city">${cname(cityNow)}${many ? `<span style="font-size:15px;font-weight:600"> · הכי זול מבין ${citiesOfW(w).length} יעדים</span>` : ''}</div><div class="air">${air} · 🎫 ${paxText(px)}</div>`}</div>
+      <div class="cap">${w.dest
+        ? `<div class="city">${destLabel(w.dest)}</div><div class="air">${w.drive && w.drive[cityNow] ? `🚗 ${hm(w.drive[cityNow])} נסיעה` : ''}${many ? `${w.drive && w.drive[cityNow] ? ' · ' : ''}הזול מבין ${citiesOfW(w).length} שדות` : ''} · 🎫 ${paxText(px)}</div>`
+        : `<div class="city">${cname(cityNow)}</div><div class="air">${many ? `הזול מבין ${citiesOfW(w).length} יעדים · ` : ''}${air} · 🎫 ${paxText(px)}</div>`}</div>
     </div>
     <div class="cb">
     ${(() => { const o = (r && r.outDate) || w.out, b = (r && r.backDate) || w.back, flex = !isExactDay(...winOf(w, 'out')) || !isExactDay(...winOf(w, 'back'));
-      return `<div class="dates">📅 ${flex && r && r.outDate ? 'הכי זול: ' : ''}${dayName(o)} ${heD(o)} ← ${dayName(b)} ${heD(b)} · ${nights(o, b)} לילות</div>
-      ${cityList}
-      ${optsText(w) ? `<div class="opts">⚙️ ${optsText(w)}${flex ? ` · ביקשת ${heD(w.out)} ← ${heD(w.back)}` : ''}</div>` : ''}`; })()}
+      return `<div class="dates"><span class="dchip">📅 ${dayName(o)} ${heD(o)} ← ${dayName(b)} ${heD(b)}</span> <span class="opts" style="display:inline">· ${nights(o, b)} לילות${flex && r && r.outDate ? ' · התאריכים הזולים בטווח' : ''}</span></div>`; })()}
     ${status}
     ${badge}
     <div class="chg">${chg}${r && r.stale ? ' · <span class="up">חלק מהמחיר מבדיקה קודמת</span>' : ''}</div>
     ${low && h.length > 2 ? `<div class="low">הכי נמוך שראינו: <b>${ils(low.price)}</b> (${new Date(low.t).toLocaleDateString('he-IL')})</div>` : ''}
     ${spark(h)}
+    <a class="gbtn" href="${gfRound((r && r.outDate) || w.out, (r && r.backDate) || w.back, CFG.origin || 'TLV', cityNow, paxOf(w))}" target="_blank">🔎 לראות ולהזמין בגוגל טיסות${many ? ' · ' + cname(cityNow) : ''}</a>
+    <details class="more"><summary>${many ? `כל ${citiesOfW(w).length} השדות ופרטי הטיסה` : 'פרטי הטיסה והחיפוש'}</summary>
+    ${cityList}
+    ${(() => { const flex = !isExactDay(...winOf(w, 'out')) || !isExactDay(...winOf(w, 'back')); return optsText(w) ? `<div class="opts">⚙️ ${optsText(w)}${flex ? ` · ביקשת ${heD(w.out)} ← ${heD(w.back)}` : ''}</div>` : ''; })()}
     <div class="legs">${r && r.price != null ? `<div class="opts" style="margin:0 0 4px">${r.rt ? '🎫 מחיר של כרטיס הלוך-חזור אחד' : '🎫 מחיר לפי שני כרטיסים לכיוון אחד (הלוך-חזור לא נטען הפעם)'}</div>` : ''}
       ${r && r.price != null && r.combos > 1 ? `<div class="cov ${(r.grid === 'OK' || r.grid === 'ALL') && !r.capped ? 'ok' : ''}">${(r.grid === 'OK' || r.grid === 'ALL') && !r.capped
         ? `✅ נבדקו כל ${r.combos} הצירופים בטווח · הכי זול: ${dayName(r.outDate)} ${heD(r.outDate)} ← ${dayName(r.backDate)} ${heD(r.backDate)}`
         : r.grid === 'OK' ? `✅ נבדקו הצירופים הזולים בטווח (${r.combos} צירופים)` : `ℹ️ נבדקו חלק מהצירופים בטווח (טבלת התאריכים של גוגל לא נטענה הפעם)`}</div>` : ''}
       ${r && r.gridMin ? `<div class="opts" style="margin:0 0 6px">💡 בלי ההגבלות שלך (חברה, שעות, שבת) יש בטווח גם ב-${ils(r.gridMin)}${pc > 1 ? ' לכולם' : ''}</div>` : ''}${leg('🛫 הלוך', (r && r.outDate) || w.out, r && r.out)}${leg('🛬 חזור', (r && r.backDate) || w.back, r && r.back)}
-      <a class="gbtn" href="${gfRound((r && r.outDate) || w.out, (r && r.backDate) || w.back, CFG.origin || 'TLV', cityNow, paxOf(w))}" target="_blank">🔎 לראות הלוך-חזור בגוגל טיסות${many ? ' (' + cname(cityNow) + ')' : ''}</a></div>
+      </div></details>
     ${can ? `<div class="tools">
       <button class="ghost" data-edit="${w.id}">✎ עריכה</button>
       <button class="ghost" data-del="${w.id}">🗑 מחיקה</button></div>` : ''}
