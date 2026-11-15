@@ -749,6 +749,13 @@ $('#pSave').onclick = async () => {
   try {
     if (!(await rpc('ft_save_profile', { p_name: $('#pName').value.trim(), p_whatsapp: $('#pWa').value.trim() }))) throw new Error('המספר לא נראה תקין. כותבים למשל 050-1234567.');
     m.className = 'msg ok'; m.textContent = '✓ נשמר.'; await load();
+    // מספר חדש שעוד לא אומת — הודעת פתיחה בוואטסאפ עם כרטיס איש הקשר של המערכת
+    if (ME && ME.whatsapp && !ME.wa_ok && !ME.admin) {
+      const t = await token();
+      const r = await fetch(`${CFG.supabase.url}/functions/v1/ft-wa-intro`, { method: 'POST', headers: { apikey: CFG.supabase.key, Authorization: 'Bearer ' + t } }).then((x) => x.text()).catch(() => '');
+      if (r === 'sent') m.textContent = '✓ נשמר. שלחנו לך עכשיו הודעה בוואטסאפ עם כרטיס איש הקשר של המערכת — שומרים אותו ושולחים "שלום".';
+      else if (r === 'limit') m.textContent = '✓ נשמר. (היום כבר נשלחו כמה הודעות פתיחה — שומרים את המספר ושולחים "שלום" לפי ההוראות כאן.)';
+    }
   } catch (e) { m.className = 'msg err'; m.textContent = e.message; }
 };
 $('#admInvSave').onclick = async () => {
