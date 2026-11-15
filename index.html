@@ -654,10 +654,10 @@ function card(w, can) {
   return `<div class="card ${hit ? 'hit' : ''}">
     <div class="photo" style="background-image:url(${w.dest && (w.dest.img || PIMG[w.dest.name]) ? (w.dest.img || PIMG[w.dest.name]) : `img/${img}.jpg`})">
       ${w.title ? `<div class="ttl">🧳 ${esc(w.title)}</div>` : ''}
-      ${per != null ? `<div class="pchip"><b>${ils(per)}</b><span>${pc > 1 ? 'לנוסע' : 'הלוך-חזור'}</span></div>` : ''}
+      ${per != null ? `<div class="pchip"><b>${ils(per)}</b><span>${pc > 1 ? 'לנוסע' : 'הלוך-חזור'}${w.dest || many ? `<br>✈️ דרך ${cname(cityNow)}` : ''}</span></div>` : ''}
       ${hit ? '<div class="ribbon">✅ מתחת ליעד!</div>' : ''}
       <div class="cap">${w.dest
-        ? `<div class="city">${destLabel(w.dest)}</div><div class="air">✈️ דרך ${cname(cityNow)}${dr(cityNow)}${many ? ` · הזול מבין ${citiesOfW(w).length} שדות` : ''} · 🎫 ${paxText(px)}</div>`
+        ? `<div class="city">${destLabel(w.dest)}</div><div class="air">${w.drive && w.drive[cityNow] ? `🚗 ${hm(w.drive[cityNow])} נסיעה` : ''}${many ? `${w.drive && w.drive[cityNow] ? ' · ' : ''}הזול מבין ${citiesOfW(w).length} שדות` : ''} · 🎫 ${paxText(px)}</div>`
         : `<div class="city">${cname(cityNow)}</div><div class="air">${many ? `הזול מבין ${citiesOfW(w).length} יעדים · ` : ''}${air} · 🎫 ${paxText(px)}</div>`}</div>
     </div>
     <div class="cb">
