@@ -1,0 +1,62 @@
+name: בדיקה מהירה (טיול חדש)
+# רץ במקביל לבדיקה הרגילה: כל 30 שניות בודק אם משתמש הוסיף/שינה טיול או ביקש הודעת בדיקה,
+# ואז בודק מיד רק את הטיול החדש — בנפרד לכל משתמש — ושולח לו את התוצאה.
+# כותב רק ל-data/quick.json ול-data/state-quick.json (הבדיקה הרגילה ממזגת אותם).
+on:
+  schedule:
+    - cron: "37 */2 * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: write
+concurrency: { group: quick, cancel-in-progress: false }
+jobs:
+  quick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - run: npm install --no-audit --no-fund
+      - name: התקנת הדפדפן
+        run: |
+          npx playwright install chromium
+          timeout 300 npx playwright install-deps chromium || echo "install-deps נכשל, ממשיכים"
+      - name: מחכים לטיולים חדשים
+        env:
+          RT_LOG: '1'
+          PAGE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TEXTMEBOT_APIKEY: ${{ secrets.TEXTMEBOT_APIKEY }}
+          WHATSAPP_TO: ${{ secrets.WHATSAPP_TO }}
+          MAIL_USER: ${{ secrets.MAIL_USER }}
+          MAIL_PASS: ${{ secrets.MAIL_PASS }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+        run: |
+          git config user.name "flight-bot"
+          git config user.email "flight-bot@users.noreply.github.com"
+          end=$((SECONDS + 5*3600 + 20*60))
+          sig() { node sig.js 2>/dev/null || echo x; }
+          last=start
+          while [ $SECONDS -lt $end ]; do
+            now=$(sig)
+            if [ "$now" != "x" ] && [ "$now" != "$last" ]; then
+              echo "=== בדיקה מהירה $(date -u +%H:%M:%S) UTC"
+              git pull -q --rebase -X theirs origin main || echo "git pull נכשל"
+              QUICK=1 node scan.js || echo "הבדיקה המהירה נכשלה"
+              git add data/quick.json data/state-quick.json 2>/dev/null || true
+              if ! git diff --cached --quiet; then
+                git commit -q -m "בדיקה מהירה (טיול חדש)"
+                for j in 1 2 3 4; do git pull -q --rebase -X theirs origin main && git push -q && break; sleep 5; done
+              fi
+              last=$now
+            fi
+            sleep 30
+          done
+      - name: הפעלה מחדש של השרשרת
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run quick.yml --ref main

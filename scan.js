@@ -342,14 +342,46 @@ function saveChannelStatus() {
   const wHist = rd('data/watch-history.json', {});
   const state = rd('data/state.json', {});
   const sys = (state._sys = state._sys || {});
+  // הבדיקה המהירה רצה ב-job נפרד (quick.yml) וכותבת רק ל-data/quick.json ול-data/state-quick.json
+  const QUICK = !!process.env.QUICK;
+  const quickF = rd('data/quick.json', { watches: {} });
+  const sq = rd('data/state-quick.json', {});
+  for (const [id, q] of Object.entries(sq)) {
+    if (id.startsWith('_') || !q) continue;
+    const st = (state[id] = state[id] || {});
+    if (!st.firstDone && q.firstDone) st.firstDone = q.firstDone;
+    if (st.last == null && q.last != null) st.last = q.last;
+    if (st.under == null && q.under != null) st.under = q.under;
+  }
   const notes = []; // { owner, text } — owner null = מערכת (למנהל)
   const note = (owner, text) => notes.push({ owner: owner || null, text });
   // בדיקה מהירה (ONLY_NEW): רק טיולים חדשים או ששונו — כדי שהתוצאה שלהם תגיע תוך כמה דקות
-  const ONLY_NEW = !!process.env.ONLY_NEW;
+  const ONLY_NEW = QUICK || !!process.env.ONLY_NEW;
   if (ONLY_NEW) {
-    watches = watches.filter((w) => !(prev.watches || {})[w.id] || !(state[w.id] && state[w.id].firstDone));
+    watches = watches.filter((w) => (!(prev.watches || {})[w.id] && !quickF.watches[w.id]) || !(state[w.id] && state[w.id].firstDone));
+    if (QUICK && !process.env.OWNER) {
+      // 1) "שלח הודעת בדיקה" מהאתר — מיד (מצב כל הטיולים של המשתמש, לפי הבדיקה האחרונה)
+      FX = prev.fx || null;
+      const td = (sq._test = sq._test || { ...(sys.testDoneU || {}) }); // בפעם הראשונה — מה שהבדיקה הרגילה כבר שלחה
+      const merged0 = { ...(prev.watches || {}) };
+      for (const [id, r] of Object.entries(quickF.watches || {})) if (!merged0[id] || (r.t && r.t > (prev.updated || ''))) merged0[id] = r;
+      let dirty = false;
+      if (USERS) for (const [id, u] of Object.entries(USERS)) { const t = (u.settings || {}).testAt; if (t && t !== td[id]) { td[id] = t; dirty = true;
+        await sendTo(id, statusMessage(allWatches.filter((w) => w.owner === id), merged0, '✅ בדיקה: מעקב הטיסות מחובר ועובד. ככה נראים הטיולים שלך עכשיו:', ownerName(id))); } }
+      if (dirty) wr('data/state-quick.json', sq);
+      // 2) טיולים חדשים — בדיקה נפרדת לכל משתמש (כל אחד מקבל את התוצאה שלו בלי לחכות לאחרים)
+      const owners = [...new Set(watches.map((w) => w.owner || '-'))];
+      console.log(`בדיקה מהירה: ${watches.length} טיולים חדשים, ${owners.length} משתמשים`);
+      for (const o of owners) {
+        try { require('child_process').execFileSync(process.execPath, [__filename], { env: { ...process.env, OWNER: o }, stdio: 'inherit', timeout: 20 * 60e3 }); }
+        catch (e) { console.log('בדיקה מהירה נכשלה למשתמש', o, e.message); }
+      }
+      return;
+    }
+    if (QUICK) watches = watches.filter((w) => (w.owner || '-') === process.env.OWNER);
     subs = mkSubs(watches);
     console.log(`בדיקה מהירה: ${watches.length} טיולים חדשים/ששונו`);
+    if (QUICK && !watches.length) return;
   }
   // הבדיקות נעצרו לזמן ארוך? מודיעים שחזרו לעבוד
   if (!ONLY_NEW && prev.updated && now - new Date(prev.updated) > 90 * 60e3 && sys.gapFor !== prev.updated) {
@@ -411,6 +443,7 @@ function saveChannelStatus() {
     console.log(`רק ${okCount}/${keys.length} נטענו — לא שומרים`);
     sys.fails = (sys.fails || 0) + 1;
     if (sys.fails === 3) note(null, '⚠️ שלוש בדיקות ברצף לא הצליחו לקרוא מחירים מגוגל. ממשיכים לנסות כל חצי שעה — אודיע כשזה יסתדר.');
+    if (QUICK) return; // הבדיקה המהירה לא נוגעת במצב של הבדיקה הרגילה
     wr('data/state.json', state);
     await sendNotes(notes);
     return;
@@ -605,6 +638,22 @@ function saveChannelStatus() {
   }
 
   const fx = FX;
+  if (QUICK) {
+    // רק הקבצים של הבדיקה המהירה (הבדיקה הרגילה ממזגת אותם בריצה הבאה)
+    const q = rd('data/quick.json', { watches: {} }), s2 = rd('data/state-quick.json', {}), old = now - 3 * 864e5;
+    for (const w of watches) if (wOut[w.id]) q.watches[w.id] = { ...wOut[w.id], t: now.toISOString() };
+    for (const [id, r] of Object.entries(q.watches)) if (!r.t || new Date(r.t) < old) delete q.watches[id];
+    q.at = now.toISOString(); q.fx = fx;
+    for (const w of watches) { const st = state[w.id]; if (st && st.firstDone) s2[w.id] = { firstDone: st.firstDone, last: st.last ?? null, under: st.under ?? null, t: now.toISOString() }; }
+    for (const [id, r] of Object.entries(s2)) if (!id.startsWith('_') && r && r.t && new Date(r.t) < old) delete s2[id];
+    wr('data/quick.json', q); wr('data/state-quick.json', s2);
+    for (const owner of [...new Set(alerts.map((x) => x.w.owner || null))])
+      await sendTo(owner, message(alerts.filter((x) => (x.w.owner || null) === owner), ownerName(owner)));
+    await sendNotes(notes.filter((n) => n.owner)); // רק "הבדיקה הראשונה הסתיימה" — למשתמש
+    console.log(`בדיקה מהירה: נשמר ${watches.length} טיולים`);
+    return;
+  }
+  for (const w of allWatches) if (!wOut[w.id] && quickF.watches[w.id]) wOut[w.id] = quickF.watches[w.id];
   const noDirect = { ...(prev.noDirect || {}) };
   for (const w of subs) { const P = plan[w.id]; if (!P || !P.allLoaded) continue;
     if (P.noDirect) { const o = typeof noDirect[w.city] === 'object' ? noDirect[w.city] : { n: 0 }; noDirect[w.city] = { n: (o.n || 0) + 1, t: now.toISOString() }; } else if (P.anyDirect) delete noDirect[w.city]; }
@@ -642,7 +691,7 @@ function saveChannelStatus() {
   const statusTo = async (owner) => { if (tested.has(owner)) return; tested.add(owner);
     await sendTo(owner, statusMessage(allWatches.filter((w) => (w.owner || null) === owner), wOut, '✅ בדיקה: מעקב הטיסות מחובר ועובד. ככה נראים הטיולים שלך עכשיו:', ownerName(owner))); };
   const td = (sys.testDoneU = sys.testDoneU || {});
-  if (USERS) for (const [id, u] of Object.entries(USERS)) { const t = (u.settings || {}).testAt; if (t && t !== td[id]) { td[id] = t; await statusTo(id); } }
+  if (USERS) { /* בקשות בדיקה מהאתר — בבדיקה המהירה (quick.yml), מיד */ }
   else { const testReq = settings.testAt && settings.testAt !== sys.testDone; if (testReq) { sys.testDone = settings.testAt; await statusTo(null); } }
   // בקשת בדיקה מקובץ במאגר (test-request.json: {"at": "..."}) — למנהל
   const fileTest = rd('test-request.json', {}).at;

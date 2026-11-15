@@ -274,6 +274,10 @@ async function load() {
   try { ME = (await token()) ? await rpc('ft_me') : null; } catch { ME = null; }
   W = ME ? (ME.watches || []) : [];
   SET = ME ? (ME.settings || {}) : {};
+  // תוצאות הבדיקה המהירה (טיול חדש) — עד שהבדיקה הרגילה תכלול אותו
+  const Q = await getFile('data/quick.json', {});
+  L.watches = L.watches || {};
+  for (const [id, r] of Object.entries(Q.watches || {})) if (!L.watches[id] || (r.t && r.t > (L.updated || ''))) L.watches[id] = r;
   CH = await getFile('data/channels.json', {});
   if (!Object.keys(AIRP).length) AIRP = await getFile('airports.json', {});
   if (pending && L.updated && new Date(L.updated) > pending) pending = 0;
@@ -701,7 +705,7 @@ function bindCards() {
       const list = W.map((w) => {
         if (w.id !== b.dataset.esave) return w;
         const same = (k) => JSON.stringify(k === 'airlines' ? airsOf(w) : w[k] ?? null) === JSON.stringify(t[k] ?? null);
-        const moved = JSON.stringify(citiesOfW(w)) !== JSON.stringify(t.cities) || JSON.stringify(paxOf(w)) !== JSON.stringify(t.pax) || !['out', 'back', 'outHours', 'backHours', 'airlines'].every(same) || (w.noShabbat !== false) !== t.noShabbat || JSON.stringify([...winOf(w, 'out'), ...winOf(w, 'back')]) !== JSON.stringify([t.outFrom, t.outTo, t.backFrom, t.backTo]);
+        const moved = JSON.stringify(citiesOfW(w)) !== JSON.stringify(t.cities) || JSON.stringify(paxOf(w)) !== JSON.stringify(t.pax) || !['out', 'back', 'outHours', 'backHours', 'airlines', 'nightsMin', 'nightsMax'].every(same) || (w.noShabbat !== false) !== t.noShabbat || JSON.stringify([...winOf(w, 'out'), ...winOf(w, 'back')]) !== JSON.stringify([t.outFrom, t.outTo, t.backFrom, t.backTo]);
         // טיסות אחרות = טיול חדש: מתחילים מעקב (וגרף) מחדש
         const { airline, flexOut, flexBack, flexOutDir, flexBackDir, ...rest } = w;
         return { ...rest, ...t, city: t.cities[0], id: moved ? 'w' + Date.now().toString(36) : w.id };
