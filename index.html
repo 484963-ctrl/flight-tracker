@@ -328,7 +328,8 @@ function render() {
   renderStats();
   // תמונות של מקומות שעוד לא נטענו
   const miss = W.filter((w) => w.dest && !(w.dest.name in PIMG));
-  if (miss.length) Promise.all(miss.map((w) => placeImg(w.dest.name))).then(() => render());
+  const missS = W.map((w) => tripImgKey(w, (L.watches || {})[w.id])).filter((k) => k.sea && !((k.name + '|' + k.sea) in PIMG));
+  if (miss.length || missS.length) Promise.all([...miss.map((w) => placeImg(w.dest.name)), ...missS.map((k) => seasonImg(k.name, k.sea))]).then(() => render());
   renderChannels(can);
   renderOverview();
 }
@@ -449,6 +450,38 @@ document.addEventListener('click', (e) => {
   if (ex) ex.checked = true; else L_.insertAdjacentHTML('beforeend', airChip(p, c, true));
   $(`#${p}AQ`).value = ''; $(`#${p}ASug`).innerHTML = '';
 });
+// עונה לפי תאריך היציאה: חורף = נובמבר–מרץ (בחצי הכדור הדרומי הפוך). במקומות חמים (קו רוחב עד 38) — בלי
+const seasonOf = (d, lat) => { if (!d || lat == null || Math.abs(lat) < 38) return ''; const m = +d.slice(5, 7); const w = m >= 11 || m <= 3; return (lat < 0 ? !w : w) ? 'w' : 's'; };
+// תמונה של המקום בעונה (מוויקישיתוף): שם המקום בכותרת או בקטגוריות, מילה של חורף/קיץ, רחבה, בלי קולאז׳/מפה/פוסטר
+async function seasonImg(name, sea) {
+  const key = name + '|' + sea;
+  if (key in PIMG) return PIMG[key];
+  const strip = (t) => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const W = /winter|snow|ski|schnee|inverno|hiver|invierno|zima|neve|neige|frost/i, S = /summer|sommer|estate|\bete\b|été|verano|lake|see|alm|hiking|wander|meadow/i;
+  let url = null;
+  try {
+    const d = await fetch(`https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrnamespace=6&gsrlimit=40&gsrsearch=${encodeURIComponent(name + ' ' + (sea === 'w' ? 'winter' : 'summer') + ' filetype:bitmap')}&prop=imageinfo|categories&iiprop=size&cllimit=max`).then((r) => r.json());
+    const ps = Object.values((d.query && d.query.pages) || {}).sort((a, b) => a.index - b.index);
+    const good = ps.map((p) => {
+      const i = p.imageinfo && p.imageinfo[0]; if (!i || i.width < 1000 || i.width < i.height * 1.3) return null;
+      const cats = (p.categories || []).map((c) => c.title).join('|'), all = p.title + '|' + cats, t = strip(all);
+      if (!t.includes(strip(name)) || /montage|collage|\bmap\b|karte|logo|poster|plakat|painting|gemälde|olympic|bahnhof|station|train/i.test(all)) return null;
+      if (!(sea === 'w' ? W : S).test(all) || (sea === 'w' ? /summer|sommer/i : W).test(p.title)) return null;
+      return { f: p.title.slice(5), sc: (/Quality images|Featured pictures|Valued images/.test(cats) ? 0 : 2) + (strip(p.title).includes(strip(name)) ? 0 : 1) + p.index / 100 };
+    }).filter(Boolean).sort((a, b) => a.sc - b.sc);
+    if (good[0]) url = fileUrl(good[0].f);
+  } catch {}
+  PIMG[key] = url;
+  if (url) try { const keep = Object.fromEntries(Object.entries(PIMG).filter(([, v]) => v)); localStorage.setItem('flights-place-img2', JSON.stringify(keep)); } catch {}
+  return url;
+}
+// התמונה לכרטיס: בעונה של הטיול אם נמצאה, אחרת התמונה הרגילה
+const tripImgKey = (w, r) => {
+  const od = (r && r.outDate) || w.out;
+  if (w.dest) { const sea = seasonOf(od, w.dest.lat); return { name: w.dest.name, sea }; }
+  const c = (r && r.city) || citiesOfW(w)[0], a = AIRP[c];
+  return { name: a ? (a[4] || a[0]) : c, sea: a ? (seasonOf(od, a[1]) === 'w' ? 'w' : '') : '' }; // שדה: תמונת חורף רק בחורף (בקיץ — התמונה הקבועה)
+};
 const cnameAll = (c) => (CFG.cities && CFG.cities[c]) || (AIRP[c] && AIRP[c][0]) || c;
 function destBox(p, w) {
   if (w.dest) DEST[p] = { ...w.dest, drive: w.drive || {} }; else if (w.id) delete DEST[p];
@@ -823,7 +856,10 @@ function card(w, can) {
         const links = `<span class="cl">${c.price != null ? `<a href="${gfRound(c.outDate, c.backDate, CFG.origin || 'TLV', c.city, px)}" target="_blank" title="לראות את הטיסות בגוגל טיסות">✈️<span class="t"> טיסות</span></a>` : ''}</span>`;
         return `<div class="crow ${star ? 'best' : ''}">${inner}${links}</div>`; }).join('')}</div>` : '';
   return `<div class="card ${hit ? 'hit' : ''}">
-    <div class="photo" style="background-image:url(${w.dest && (w.dest.name in PIMG ? PIMG[w.dest.name] : w.dest.img) ? (w.dest.name in PIMG ? PIMG[w.dest.name] : w.dest.img) : `img/${w.dest ? 'other' : img}.jpg`})">
+    <div class="photo" style="background-image:url(${(() => { const k = tripImgKey(w, r), si = k.sea && PIMG[k.name + '|' + k.sea];
+      if (si) return si;
+      const base = w.dest ? (w.dest.name in PIMG ? PIMG[w.dest.name] : w.dest.img) : null;
+      return base || `img/${w.dest ? 'other' : img}.jpg`; })()})">
       ${w.title ? `<div class="ttl">🧳 ${esc(w.title)}</div>` : ''}
       ${per != null ? `<div class="pchip"><b>${ils(per)}</b><span>${pc > 1 ? 'לנוסע' : 'הלוך-חזור'}${w.dest || many ? `<br>✈️ דרך ${cname(cityNow)}` : ''}</span></div>` : ''}
       ${hit ? '<div class="ribbon">✅ מתחת ליעד!</div>' : ''}
