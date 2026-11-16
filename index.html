@@ -552,7 +552,13 @@ async function destFind(p) {
     const seen = new Set();
     res = res.filter((x) => { const k = x.display_name; if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 5);
   }
-  if (!res || !res.length) { m.className = 'msg err'; m.textContent = 'לא מצאתי מקום כזה. נסו לכתוב באנגלית, או להדביק קישור מגוגל מפות.'; return; }
+  if (!res || !res.length) {
+    // אין תוצאה ישירה — מציגים את רשימת ההצעות (גם מהמרה מעברית לאנגלית)
+    m.className = 'msg'; m.textContent = '🔎 מחפש עוד אפשרויות…';
+    $(`#${p}DQ`).dispatchEvent(new Event('input', { bubbles: true }));
+    setTimeout(() => { const box = $(`#${p}DSug`); if (box && box.querySelector('[data-sug]')) { m.className = 'msg'; m.textContent = '👆 בחרו מהרשימה.'; } else { m.className = 'msg err'; m.textContent = 'לא מצאתי מקום כזה. נסו לכתוב באנגלית, לבחור על המפה, או להדביק קישור מגוגל מפות.'; } }, 2500);
+    return;
+  }
   const nmOf = (x) => (x.namedetails && (x.namedetails['name:en'] || x.namedetails.name)) || x.display_name.split(',')[0];
   if (res.length === 1) return destCompute(p, +res[0].lat, +res[0].lon, nmOf(res[0]), res[0].namedetails);
   P_ND[p] = res;
@@ -595,7 +601,8 @@ function translit(q) {
     out.push(s);
   }
   const base = out.join(' ');
-  const v = new Set([base, base.replace(/sh/g, 'sch'), base.replace(/^k/, 'c').replace(/ k/g, ' c'), base.replace(/k/g, 'c'), base.replace(/o/g, 'u'), base.replace(/ai/g, 'ay').replace(/^k/, 'c'), base.replace(/tz/g, 'z'), base.replace(/sh/g, 's'), base.replace(/ei$/, 'ai')]);
+  const f0 = base.replace(/^p/, 'f').replace(/ p/g, ' f'), dbl = (t) => t.replace(/([slnmrtfk])$/, '$1$1');
+  const v = new Set([base, base.replace(/sh/g, 'sch'), f0, dbl(f0), dbl(base), base.replace(/^k/, 'c').replace(/ k/g, ' c'), base.replace(/k/g, 'c'), base.replace(/o/g, 'u'), base.replace(/ai/g, 'ay').replace(/^k/, 'c'), base.replace(/tz/g, 'z'), base.replace(/sh/g, 's'), base.replace(/ei$/, 'ai')]);
   return [...v].slice(0, 5);
 }
 // הצעות תוך כדי הקלדה: בעברית — מוויקיפדיה העברית; באנגלית — Photon (OpenStreetMap)
@@ -620,7 +627,7 @@ document.addEventListener('input', (e) => {
         // ויקיפדיה העברית (מקומות מוכרים) + המרה לאותיות לטיניות (כפרים קטנים)
         const [wk, ...tl] = await Promise.all([
           fetch(`https://he.wikipedia.org/w/api.php?action=query&format=json&origin=*&generator=prefixsearch&gpssearch=${encodeURIComponent(qq)}&gpslimit=10&prop=coordinates|description|langlinks&lllang=en&lllimit=1`).then((r) => r.json()).catch(() => ({})),
-          ...translit(qq).slice(0, 4).map((t) => photon(t, 4, cc))]);
+          ...translit(qq).slice(0, 5).map((t) => photon(t, 4, cc))]);
         list = Object.values((wk.query && wk.query.pages) || {}).filter((x) => x.coordinates && (cc || inEu(x.coordinates[0].lat, x.coordinates[0].lon))).sort((a, b) => a.index - b.index)
           .map((x) => ({ he: x.title, name: (x.langlinks && x.langlinks[0] && x.langlinks[0]['*']) || x.title, desc: x.description || '', lat: x.coordinates[0].lat, lon: x.coordinates[0].lon }));
         list.push(...tl.flat());
