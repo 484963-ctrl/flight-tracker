@@ -389,13 +389,13 @@ function saveChannelStatus() {
     console.log(`בדיקה מהירה: ${watches.length} טיולים חדשים/ששונו`);
     if (QUICK && !watches.length) return;
   }
-  // כמה פעמים לבדוק כל טיול — לפי כמה הטיסה קרובה: עד חודש — כל ריצה (חצי שעה), עד חצי שנה — כל שעתיים, רחוק יותר — כל 12 שעות
+  // כמה פעמים לבדוק כל טיול (הטיולים של המנהל — תמיד כל חצי שעה) — לפי כמה הטיסה קרובה: עד חודש — כל ריצה (חצי שעה), עד חצי שנה — כל שעתיים, רחוק יותר — כל 12 שעות
   const dueEvery = (w) => { const days = (new Date((w.outFrom || w.out || '').slice(0, 10) + 'T12:00:00Z') - now) / 864e5; return days <= 31 ? 0 : days <= 183 ? 2 * 3600e3 - 5 * 60e3 : 12 * 3600e3 - 5 * 60e3; };
   const skipped = [];
   if (!ONLY_NEW && !process.env.FULL) {
     const keep = [];
     for (const w of watches) {
-      const st = state[w.id] || {}, ev = dueEvery(w), have = (prev.watches || {})[w.id] || quickF.watches[w.id];
+      const st = state[w.id] || {}, ev = USERS && USERS[w.owner] && USERS[w.owner].admin ? 0 : dueEvery(w), have = (prev.watches || {})[w.id] || quickF.watches[w.id];
       if (ev && have && st.lastChk && now - new Date(st.lastChk) < ev) skipped.push(w); else keep.push(w);
     }
     if (skipped.length) { console.log(`לא נבדקים הפעם (טיסה רחוקה, נבדקו לאחרונה): ${skipped.length}`); watches = keep; subs = mkSubs(watches); }
