@@ -1,30 +1,30 @@
 {
- "origin": "TLV",
- "cities": {
-  "MUC": "מינכן",
-  "ZRH": "ציריך",
-  "MXP": "מילאנו",
-  "VCE": "ונציה",
-  "INN": "אינסברוק",
-  "SZG": "זלצבורג",
-  "VIE": "וינה",
-  "BGY": "ברגמו (מילאנו)"
- },
- "alertMinDrop": 30,
- "overview": {
-  "on": true,
-  "outFrom": "2027-08-15",
-  "outTo": "2027-08-31",
-  "backFrom": "2027-08-16",
-  "backTo": "2027-09-02",
-  "cities": [
-   "MUC",
-   "ZRH",
-   "MXP"
-  ]
- },
- "supabase": {
-  "url": "https://opepjcatbfwtpymnnnvl.supabase.co",
-  "key": "sb_publishable_VF-Lyt6W_swwEcu0ESMQvw_5bPickuL"
- }
+  "origin": "TLV",
+  "cities": {
+    "MUC": "מינכן",
+    "ZRH": "ציריך",
+    "MXP": "מילאנו",
+    "VCE": "ונציה",
+    "INN": "אינסברוק",
+    "SZG": "זלצבורג",
+    "VIE": "וינה",
+    "BGY": "ברגמו (מילאנו)"
+  },
+  "alertMinDrop": 30,
+  "overview": {
+    "on": false,
+    "outFrom": "2027-08-15",
+    "outTo": "2027-08-31",
+    "backFrom": "2027-08-16",
+    "backTo": "2027-09-02",
+    "cities": [
+      "MUC",
+      "ZRH",
+      "MXP"
+    ]
+  },
+  "supabase": {
+    "url": "https://opepjcatbfwtpymnnnvl.supabase.co",
+    "key": "sb_publishable_VF-Lyt6W_swwEcu0ESMQvw_5bPickuL"
+  }
 }

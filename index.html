@@ -278,11 +278,7 @@
     <div class="msg" id="admMsg"></div>
   </div>
 
-  <details class="box" id="ovBox">
-    <summary>📅 כל התאריכים — לעזרה בבחירת תאריכים (מתעדכן פעם ביום)</summary>
-    <div class="tabs" id="ovTabs"></div>
-    <div id="ov"></div>
-  </details>
+
 
   <div class="note">
     המחיר הוא הלוך + חזור, טיסות ישירות, למבוגר אחד, במחלקת תיירים, כפי שמופיע ב-Google Flights (ייתכן שבלי מזוודה).
@@ -358,7 +354,7 @@ function render() {
   if (!ME && !joinMode && !$('#authNewPass').offsetParent) $('#keyBox').style.display = '';
   if (joinMode) $('#keyBox').style.display = 'none';
   // בדף ההרשמה — רק ההרשמה
-  for (const sel of ['#cards', '#ovBox']) { const el = $(sel); if (el) el.style.display = joinMode ? 'none' : ''; }
+  for (const sel of ['#cards']) { const el = $(sel); if (el) el.style.display = joinMode ? 'none' : ''; }
   document.querySelectorAll('.sec').forEach((el) => (el.style.display = joinMode ? 'none' : ''));
   // חשבון חינמי: טיול אחד. מגיעים למגבלה — במקום הטופס, הסבר
   const full = ME && !ME.admin && W.length >= (ME.max_trips ?? 1);
@@ -1116,7 +1112,7 @@ $('#chTest').onclick = async () => {
 // --- סקירת כל התאריכים ---
 function renderOverview() {
   const ov = CFG.overview, legs = L.legs || {};
-  if (!ov || !ov.on) { $('#ovBox').style.display = 'none'; return; }
+  if (!ov || !ov.on || !$('#ovBox')) return; // הוסר מהאתר
   const cities = ov.cities || Object.keys(CFG.cities || {});
   ovCity = ovCity || cities[0];
   $('#ovTabs').innerHTML = cities.map((c) => `<button data-ov="${c}" class="${c === ovCity ? 'on' : ''}">${CFG.cities[c]}</button>`).join('');
