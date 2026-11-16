@@ -554,9 +554,8 @@ async function destFind(p) {
   }
   if (!res || !res.length) {
     // אין תוצאה ישירה — מציגים את רשימת ההצעות (גם מהמרה מעברית לאנגלית)
-    m.className = 'msg'; m.textContent = '🔎 מחפש עוד אפשרויות…';
+    m.className = 'msg'; m.textContent = '🔎 מחפש עוד אפשרויות…'; m.dataset.wait = '1';
     $(`#${p}DQ`).dispatchEvent(new Event('input', { bubbles: true }));
-    setTimeout(() => { const box = $(`#${p}DSug`); if (box && box.querySelector('[data-sug]')) { m.className = 'msg'; m.textContent = '👆 בחרו מהרשימה.'; } else { m.className = 'msg err'; m.textContent = 'לא מצאתי מקום כזה. נסו לכתוב באנגלית, לבחור על המפה, או להדביק קישור מגוגל מפות.'; } }, 2500);
     return;
   }
   const nmOf = (x) => (x.namedetails && (x.namedetails['name:en'] || x.namedetails.name)) || x.display_name.split(',')[0];
@@ -577,6 +576,9 @@ document.addEventListener('click', (e) => {
 });
 // עברית ← כמה כתיבים לטיניים אפשריים (לחיפוש כפרים שאין להם שם עברי במפות)
 // עברית ← כמה כתיבים לטיניים אפשריים (לחיפוש מקום)
+// אזור זמן ← מדינה (בערך, לסינון הצעות מוויקיפדיה לפי המדינה שנכתבה)
+const CC_TZ = { AT: 'Europe/Vienna', IT: 'Europe/Rome', CH: 'Europe/Zurich', DE: 'Europe/Berlin', FR: 'Europe/Paris', ES: 'Europe/Madrid', GR: 'Europe/Athens', PT: 'Europe/Lisbon', NL: 'Europe/Amsterdam', BE: 'Europe/Brussels', CZ: 'Europe/Prague', HU: 'Europe/Budapest', PL: 'Europe/Warsaw', HR: 'Europe/Zagreb', SI: 'Europe/Ljubljana', SK: 'Europe/Bratislava', RO: 'Europe/Bucharest', BG: 'Europe/Sofia', GB: 'Europe/London', IE: 'Europe/Dublin', CY: 'Asia/Nicosia', TR: 'Europe/Istanbul', GE: 'Asia/Tbilisi', ME: 'Europe/Podgorica', RS: 'Europe/Belgrade', NO: 'Europe/Oslo', SE: 'Europe/Stockholm', FI: 'Europe/Helsinki', DK: 'Europe/Copenhagen', TH: 'Asia/Bangkok', JP: 'Asia/Tokyo', MA: 'Africa/Casablanca', EG: 'Africa/Cairo', JO: 'Asia/Amman', LU: 'Europe/Luxembourg', MT: 'Europe/Malta', IS: 'Atlantic/Reykjavik', LT: 'Europe/Vilnius', LV: 'Europe/Riga', EE: 'Europe/Tallinn', AL: 'Europe/Tirane' };
+const ccTz = (tz, cc) => !CC_TZ[cc] || tz === CC_TZ[cc];
 const COUNTRY_HE = { 'אוסטריה': 'AT', 'איטליה': 'IT', 'שוויץ': 'CH', 'שווייץ': 'CH', 'גרמניה': 'DE', 'צרפת': 'FR', 'ספרד': 'ES', 'יוון': 'GR', 'פורטוגל': 'PT', 'הולנד': 'NL', 'בלגיה': 'BE', 'צ׳כיה': 'CZ', "צ'כיה": 'CZ', 'הונגריה': 'HU', 'פולין': 'PL', 'קרואטיה': 'HR', 'סלובניה': 'SI', 'סלובקיה': 'SK', 'רומניה': 'RO', 'בולגריה': 'BG', 'אנגליה': 'GB', 'בריטניה': 'GB', 'סקוטלנד': 'GB', 'אירלנד': 'IE', 'קפריסין': 'CY', 'טורקיה': 'TR', 'ארה״ב': 'US', 'ארה"ב': 'US', 'אמריקה': 'US', 'קנדה': 'CA', 'תאילנד': 'TH', 'יפן': 'JP', 'גאורגיה': 'GE', 'גרוזיה': 'GE', 'מונטנגרו': 'ME', 'סרביה': 'RS', 'נורבגיה': 'NO', 'שבדיה': 'SE', 'פינלנד': 'FI', 'דנמרק': 'DK', 'מרוקו': 'MA', 'מצרים': 'EG', 'ירדן': 'JO', 'הודו': 'IN', 'סין': 'CN', 'מקסיקו': 'MX', 'ברזיל': 'BR', 'ארגנטינה': 'AR', 'לוקסמבורג': 'LU', 'מלטה': 'MT', 'איסלנד': 'IS', 'ליטא': 'LT', 'לטביה': 'LV', 'אסטוניה': 'EE', 'אלבניה': 'AL', 'אוסטרליה': 'AU' };
 function translit(q) {
   const m = { 'א': 'a', 'ב': 'b', 'ג': 'g', 'ד': 'd', 'ה': 'h', 'ז': 'z', 'ח': 'ch', 'ט': 't', 'כ': 'k', 'ך': 'ch', 'ל': 'l', 'מ': 'm', 'ם': 'm', 'נ': 'n', 'ן': 'n', 'ס': 's', 'ע': 'a', 'פ': 'p', 'ף': 'f', 'צ': 'tz', 'ץ': 'tz', 'ק': 'k', 'ר': 'r', 'ש': 'sh', 'ת': 't' };
@@ -613,6 +615,7 @@ document.addEventListener('input', (e) => {
   const p = inp.id.slice(0, -2), q = inp.value.trim(), box = $(`#${p}DSug`);
   clearTimeout(sugT);
   if (q.length < 2 || /^https?:|maps/.test(q)) { box.innerHTML = ''; return; }
+  box.innerHTML = '<div class="sugnone">⏳ מחפש…</div>';
   sugT = setTimeout(async () => {
     let list = [];
     try {
@@ -628,7 +631,8 @@ document.addEventListener('input', (e) => {
         const [wk, ...tl] = await Promise.all([
           fetch(`https://he.wikipedia.org/w/api.php?action=query&format=json&origin=*&generator=prefixsearch&gpssearch=${encodeURIComponent(qq)}&gpslimit=10&prop=coordinates|description|langlinks&lllang=en&lllimit=1`).then((r) => r.json()).catch(() => ({})),
           ...translit(qq).slice(0, 5).map((t) => photon(t, 4, cc))]);
-        list = Object.values((wk.query && wk.query.pages) || {}).filter((x) => x.coordinates && (cc || inEu(x.coordinates[0].lat, x.coordinates[0].lon))).sort((a, b) => a.index - b.index)
+        const nearCC = (lat, lon) => !cc || Object.values(AIRP).some((a) => a[3] && ccTz(a[3], cc) && hav(lat, lon, a[1], a[2]) < 400);
+        list = Object.values((wk.query && wk.query.pages) || {}).filter((x) => x.coordinates && (cc ? nearCC(x.coordinates[0].lat, x.coordinates[0].lon) : inEu(x.coordinates[0].lat, x.coordinates[0].lon))).sort((a, b) => a.index - b.index)
           .map((x) => ({ he: x.title, name: (x.langlinks && x.langlinks[0] && x.langlinks[0]['*']) || x.title, desc: x.description || '', lat: x.coordinates[0].lat, lon: x.coordinates[0].lon }));
         list.push(...tl.flat());
       } else list = await photon(qq, 8, cc);
@@ -638,6 +642,8 @@ document.addEventListener('input', (e) => {
     } catch {}
     if (inp.value.trim() !== q) return;
     SUG[p] = list;
+    const m = $(`#${p}DMsg`);
+    if (m && m.dataset.wait) { delete m.dataset.wait; m.className = list.length ? 'msg' : 'msg err'; m.textContent = list.length ? '👆 בחרו מהרשימה.' : 'לא מצאתי מקום כזה. נסו לכתוב באנגלית, לבחור על המפה, או להדביק קישור מגוגל מפות.'; }
     box.innerHTML = list.length ? list.map((x, i) => `<button type="button" data-sug="${p}" data-i="${i}"><b>${esc(x.he || x.name)}</b>${x.he && x.name !== x.he ? ` · ${esc(x.name)}` : ''}<small>${esc(x.desc)}</small></button>`).join('')
       : '<div class="sugnone">לא נמצאו הצעות — אפשר ללחוץ "🔎 חיפוש", לבחור על המפה, או להדביק קישור מגוגל מפות</div>';
   }, 350);
