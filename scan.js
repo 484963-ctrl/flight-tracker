@@ -609,6 +609,14 @@ function saveChannelStatus() {
                    stale: fromLast || !!(best && !isRt && ((best.o.A && best.o.A.stale) || (best.k.B && best.k.B.stale))), none: allLoaded && price == null && !plan[w.id].rt.some((x) => x.r.status === 'FAIL') };
     // 'אין טיסות ישירות' — רק אם זה נמצא כבר בבדיקה קודמת (גוגל לפעמים מחזיר 'אין תוצאות' בטעות)
     if (wOut[w.id].price == null && wOut[w.id].none) { const nd = (prev.noDirect || {})[w.city]; wOut[w.id].why = plan[w.id].noDirect ? (nd && typeof nd === 'object' && nd.n >= 1 ? 'nodirect' : 'retry') : 'filters'; }
+    // שדה שלא נטען הפעם (בלי מחיר, ולא "אין טיסות ישירות") — התוצאה הטובה האחרונה שלו, עד 12 שעות, באותם תאריכים בטווח
+    const LS = (state._last = state._last || {});
+    const cur = wOut[w.id];
+    if (cur.price != null) LS[w.id] = { r: cur, t: now.toISOString() };
+    else if (cur.why !== 'nodirect' && LS[w.id] && now - new Date(LS[w.id].t) < 12 * 3600e3
+      && plan[w.id].allDates.some((x) => x.o.d === LS[w.id].r.outDate && x.k.d === LS[w.id].r.backDate)) {
+      wOut[w.id] = { ...LS[w.id].r, stale: true };
+    }
     subOut[w.id] = wOut[w.id];
     if (w.id !== w.parent) delete wOut[w.id];
   }
@@ -664,7 +672,7 @@ function saveChannelStatus() {
     if (w.target) { s.under = under ? true : price > w.target + minDrop ? false : s.under; if (!s.under) s.alertP = null; }
     s.last = price;
   }
-  for (const id of Object.keys(state)) if (id !== '_sys' && id !== '_bp' && id !== '_rt' && !allWatches.find((w) => w.id === id)) delete state[id];
+  for (const id of Object.keys(state)) if (id !== '_sys' && id !== '_bp' && id !== '_rt' && id !== '_last' && !allWatches.find((w) => w.id === id)) delete state[id];
 
   // סיכום בוקר (מ-8:00 שעון ישראל, פעם ביום) — גם סימן שהמערכת חיה
   const il = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false }).formatToParts(now);
