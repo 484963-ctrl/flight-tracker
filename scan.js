@@ -224,7 +224,7 @@ async function rtSearch(ctx, o, b, from, to, pax, okOut, okBack) {
     try {
       await p.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
       const t = await waitList(p, 30);
-      if (t === 'NONE') return { status: 'NONE', log };
+      if (t === 'NONE') { if (attempt === 0) { log.push(`${o}/${b}: "אין תוצאות" — מנסים שוב`); continue; } return { status: 'NONE', log }; }
       if (!t) throw new Error('לא נטען');
       const outs = parse(t).filter((x) => (!x.route || x.route === `${from}–${to}`) && okOut(x)).slice(0, 3);
       log.push(`${o}/${b} הלוך: ${outs.map((x) => x.air + ' ' + x.dep + ' ₪' + x.price).join(', ') || 'אין'}`);
@@ -568,7 +568,15 @@ function saveChannelStatus() {
     const { pairs, allLoaded, rt } = plan[w.id];
     const okRt = rt.filter((x) => x.r.status === 'OK').sort((x, y) => x.r.price - y.r.price)[0];
     let best = null, isRt = false;
-    if (okRt) { best = { price: okRt.r.price, o: { ...okRt.pr.o, f: okRt.r.out }, k: { ...okRt.pr.k, f: okRt.r.back } }; isRt = true; }
+    const lastRt = ((state._rt = state._rt || {})[w.id]);
+    let fromLast = false;
+    if (okRt) { best = { price: okRt.r.price, o: { ...okRt.pr.o, f: okRt.r.out }, k: { ...okRt.pr.k, f: okRt.r.back } }; isRt = true;
+      state._rt[w.id] = { price: okRt.r.price, od: okRt.pr.o.d, bd: okRt.pr.k.d, out: okRt.r.out, back: okRt.r.back, t: now.toISOString() }; }
+    else if (lastRt && now - new Date(lastRt.t) < 24 * 3600e3 && plan[w.id].allDates.some((x) => x.o.d === lastRt.od && x.k.d === lastRt.bd)) {
+      // הלוך-חזור לא נטען הפעם — המחיר האחרון של כרטיס הלוך-חזור (ולא סכום של שני כרטיסים, שהוא בדרך כלל הרבה יותר יקר)
+      const x = plan[w.id].allDates.find((x) => x.o.d === lastRt.od && x.k.d === lastRt.bd);
+      best = { price: lastRt.price, o: { ...x.o, f: lastRt.out }, k: { ...x.k, f: lastRt.back } }; isRt = true; fromLast = true;
+    }
     else if (pairs.length) best = { price: pairs[0].ow, o: pairs[0].o, k: pairs[0].k };
     const options = pairs.length;
     const price = best ? best.price : null;
@@ -577,7 +585,7 @@ function saveChannelStatus() {
                    combos: plan[w.id].allDates.length, covered: plan[w.id].covered || 0, grid: plan[w.id].grid || null, capped: !!plan[w.id].capped,
                    gridMin: plan[w.id].gridMin != null && price != null && plan[w.id].gridMin < price ? plan[w.id].gridMin : null,
                    outUrl: best && best.o.A && best.o.A.url, backUrl: best && best.k.B && best.k.B.url,
-                   stale: !!(best && !isRt && ((best.o.A && best.o.A.stale) || (best.k.B && best.k.B.stale))), none: allLoaded && price == null && !plan[w.id].rt.some((x) => x.r.status === 'FAIL') };
+                   stale: fromLast || !!(best && !isRt && ((best.o.A && best.o.A.stale) || (best.k.B && best.k.B.stale))), none: allLoaded && price == null && !plan[w.id].rt.some((x) => x.r.status === 'FAIL') };
     // 'אין טיסות ישירות' — רק אם זה נמצא כבר בבדיקה קודמת (גוגל לפעמים מחזיר 'אין תוצאות' בטעות)
     if (wOut[w.id].price == null && wOut[w.id].none) { const nd = (prev.noDirect || {})[w.city]; wOut[w.id].why = plan[w.id].noDirect ? (nd && typeof nd === 'object' && nd.n >= 1 ? 'nodirect' : 'retry') : 'filters'; }
     subOut[w.id] = wOut[w.id];
@@ -627,7 +635,7 @@ function saveChannelStatus() {
     if (w.target) s.under = under ? true : price > w.target + minDrop ? false : s.under;
     s.last = price;
   }
-  for (const id of Object.keys(state)) if (id !== '_sys' && id !== '_bp' && !allWatches.find((w) => w.id === id)) delete state[id];
+  for (const id of Object.keys(state)) if (id !== '_sys' && id !== '_bp' && id !== '_rt' && !allWatches.find((w) => w.id === id)) delete state[id];
 
   // סיכום בוקר (מ-8:00 שעון ישראל, פעם ביום) — גם סימן שהמערכת חיה
   const il = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false }).formatToParts(now);
