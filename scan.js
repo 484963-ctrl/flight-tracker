@@ -519,7 +519,11 @@ function saveChannelStatus() {
   //   א. "טבלת תאריכים" — מחיר לכל צירוף תאריכים בטווח (בלי ההגבלות של שבת/חברה/שעות)
   //   ב. בודקים את הצירופים לפי הסדר מהזול, עם ההגבלות, עד שאי אפשר כבר למצוא זול יותר
   // יעד שאין אליו אף טיסה ישירה מתאימה בכל הטווח (לפי החיפוש לכיוון אחד) — לא מחפשים הלוך-חזור, חוסך זמן
-  const needRt = subs.filter((w) => plan[w.id].allDates.length && plan[w.id].pairs.length);
+  // וגם יעד שהחיפוש לכיוון אחד לא החזיר בו כלום הפעם, אבל יש לו צירוף הלוך-חזור מבדיקה קודמת (24 שעות) — בודקים את הצירוף הזה
+  //   (בקבוצה גדולה גוגל מחזיר לפעמים "אין תוצאות" לכרטיס לכיוון אחד, גם כשהלוך-חזור יש)
+  const prevRt = (w) => { const r = (state._rt || {})[w.id], b = (state._bp || {})[w.id];
+    return [r && [r.od, r.bd, r.t], b && [b.o, b.k, b.t]].some((x) => x && now - new Date(x[2]) < 24 * 3600e3 && plan[w.id].allDates.some((y) => y.o.d === x[0] && y.k.d === x[1])); };
+  const needRt = subs.filter((w) => plan[w.id].allDates.length && (plan[w.id].pairs.length || prevRt(w)));
   if (needRt.length) {
     process.stdout.write(`הלוך-חזור (${needRt.length} טיולים): `);
     const rtBrowser = await chromium.launch(process.env.CHROME_FULL ? { executablePath: process.env.CHROME_FULL, args: ['--headless=new'] } : { channel: 'chromium' });
@@ -528,7 +532,7 @@ function saveChannelStatus() {
     async function doSub(w, ctx, fullIfNoGrid) {
       const P = plan[w.id], px = paxOf(w);
       P.rt = []; P.capped = false;
-      let order = P.allDates; // [{o,k}] כל הצירופים בטווח
+      let order = P.allDates.slice(); // [{o,k}] כל הצירופים בטווח
       let cap = +(cfg.rtTries || 4);
       if (order.length > 1) {
         const g = await gridSearch(ctx, w.out, w.back, cfg.origin, w.city, px);
@@ -551,7 +555,9 @@ function saveChannelStatus() {
       const pc = (pw.cities || []).find((c) => c.city === w.city) || (pw.city === w.city ? pw : null);
       // וגם הצירוף הכי זול שנמצא ב-24 השעות האחרונות (state._bp)
       const bp = ((state._bp = state._bp || {})[w.id]);
-      const cands = [pc && pc.rt && pc.outDate && pc.backDate ? [pc.outDate, pc.backDate] : null, bp && now - new Date(bp.t) < 24 * 3600e3 ? [bp.o, bp.k] : null].filter(Boolean);
+      const cands = [pc && pc.rt && pc.outDate && pc.backDate ? [pc.outDate, pc.backDate] : null, bp && now - new Date(bp.t) < 24 * 3600e3 ? [bp.o, bp.k] : null,
+        ((r) => r && now - new Date(r.t) < 24 * 3600e3 ? [r.od, r.bd] : null)((state._rt || {})[w.id])].filter(Boolean)
+        .filter((c, i, a) => a.findIndex((d) => d[0] === c[0] && d[1] === c[1]) === i);
       for (const [od, kd] of cands.reverse()) {
         const i = order.findIndex((x) => x.o.d === od && x.k.d === kd);
         const x = i >= 0 ? order[i] : P.allDates.find((x) => x.o.d === od && x.k.d === kd);
@@ -612,7 +618,7 @@ function saveChannelStatus() {
     // שדה שלא נטען הפעם (בלי מחיר, ולא "אין טיסות ישירות") — התוצאה הטובה האחרונה שלו, עד 12 שעות, באותם תאריכים בטווח
     const LS = (state._last = state._last || {});
     const cur = wOut[w.id];
-    if (cur.price != null) LS[w.id] = { r: cur, t: now.toISOString() };
+    if (cur.price != null && !cur.stale) LS[w.id] = { r: cur, t: now.toISOString() }; // רק תוצאה חדשה (לא מבדיקה קודמת) — כדי שהזמן לא יתחדש
     else if (cur.why !== 'nodirect' && LS[w.id] && now - new Date(LS[w.id].t) < 12 * 3600e3
       && plan[w.id].allDates.some((x) => x.o.d === LS[w.id].r.outDate && x.k.d === LS[w.id].r.backDate)) {
       wOut[w.id] = { ...LS[w.id].r, stale: true };
