@@ -150,6 +150,13 @@
   .sug button:hover { background:var(--sky); box-shadow:none; }
   .sug small { display:block; font-size:12px; color:var(--mute); }
   small.code { font-size:11px; font-weight:700; color:var(--mute); letter-spacing:.5px; direction:ltr; unicode-bidi:isolate; }
+  .join h2 { margin:0; font-size:28px; font-weight:900; color:var(--blue2); }
+  .join .jsub { font-size:17px; margin-top:6px; color:var(--ink); }
+  .jfeat { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; margin:16px 0; }
+  .jfeat div { background:var(--sky); border-radius:14px; padding:10px 12px; font-size:15px; }
+  .jfeat span { display:block; font-size:13px; color:var(--mute); margin-top:2px; }
+  .jform { border-top:1px solid var(--line); padding-top:14px; }
+  .jform .form label { flex:1; min-width:200px; }
   .sugnone { padding:10px 12px; font-size:13px; color:var(--mute); }
   .dmap { height:320px; border-radius:12px; margin-top:10px; overflow:hidden; border:1px solid var(--line); }
   details.dest summary, details.dair summary { font-size:15px; color:var(--blue2); }
@@ -180,6 +187,32 @@
   </div>
 </section>
 <div class="wrap">
+
+  <div class="box join" id="joinBox" style="display:none">
+    <h2>✈️ הסוכן האישי שלך למחירי טיסות</h2>
+    <div class="jsub">אומרים לו לאן ומתי — והוא בודק את המחירים כל הזמן, ושולח לך הודעה בוואטסאפ כשהמחיר מגיע למה שרצית.</div>
+    <div class="jfeat">
+      <div>🎯 <b>לפי היעד שלך</b><span>כותבים לאן נוסעים — והוא מוצא את כל שדות התעופה בטווח נסיעה</span></div>
+      <div>📅 <b>גמיש בתאריכים</b><span>טווח ימים, אורך טיול בלילות — וכל הצירופים נבדקים</span></div>
+      <div>🕯️ <b>בלי שבת וחג</b><span>לא מציע טיסות שממריאות או נוחתות בשבת ובחג</span></div>
+      <div>🎫 <b>מחיר למשפחה</b><span>מבוגרים, ילדים ותינוקות — לנוסע ולכולם, בשקלים ובדולרים</span></div>
+      <div>💬 <b>הודעה בוואטסאפ</b><span>כשהמחיר יורד למחיר שקבעת — עם קישור להזמנה</span></div>
+      <div>🎁 <b>בחינם</b><span>טיול אחד במעקב</span></div>
+    </div>
+    <div class="jform">
+      <b style="font-size:18px">📝 הרשמה</b>
+      <div class="form" style="margin-top:10px">
+        <label>שם מלא (פרטי ומשפחה)<input id="jName" maxlength="40" autocomplete="name" placeholder="למשל: יוסי כהן"></label>
+        <label>מספר וואטסאפ — לשם יגיעו ההודעות<input id="jPhone" type="tel" autocomplete="tel" dir="ltr" placeholder="050-1234567"></label>
+        <label>מייל<input id="jEmail" type="email" autocomplete="username" dir="ltr"></label>
+        <label>סיסמה (6 תווים לפחות)<input id="jPass" type="password" autocomplete="new-password" dir="ltr"></label>
+      </div>
+      <div class="form" style="margin-top:12px"><button class="pri" id="jGo" style="font-size:18px;padding:12px 28px">✅ הרשמה</button></div>
+      <div class="msg" id="jMsg"></div>
+      <div class="note" style="margin-top:8px">אחרי ההרשמה החשבון ממתין לאישור. מיד אחרי האישור תגיע הודעה בוואטסאפ למספר שכתבת.</div>
+      <div class="note" style="margin-top:6px">כבר רשום? <a href="#" id="jLogin">כניסה</a></div>
+    </div>
+  </div>
 
   <div class="box" id="keyBox" style="display:none">
     <div id="authOut">
@@ -320,7 +353,13 @@ async function load() {
 function render() {
   const can = !!ME && !ME.blocked;
   $('#btnKey').textContent = ME ? '👤 ' + (ME.name || ME.email) : '👤 כניסה / הרשמה';
-  if (!ME && !$('#authNewPass').offsetParent) $('#keyBox').style.display = '';
+  const joinMode = !ME && location.hash === '#join';
+  $('#joinBox').style.display = joinMode ? '' : 'none';
+  if (!ME && !joinMode && !$('#authNewPass').offsetParent) $('#keyBox').style.display = '';
+  if (joinMode) $('#keyBox').style.display = 'none';
+  // בדף ההרשמה — רק ההרשמה
+  for (const sel of ['#cards', '#ovBox']) { const el = $(sel); if (el) el.style.display = joinMode ? 'none' : ''; }
+  document.querySelectorAll('.sec').forEach((el) => (el.style.display = joinMode ? 'none' : ''));
   // חשבון חינמי: טיול אחד. מגיעים למגבלה — במקום הטופס, הסבר
   const full = ME && !ME.admin && W.length >= (ME.max_trips ?? 1);
   $('#addBox').style.display = can && !full ? '' : 'none';
@@ -1135,14 +1174,19 @@ $('#aIn').onclick = async () => {
 };
 $('#aPass').onkeydown = (e) => { if (e.key === 'Enter') $('#aIn').click(); };
 // הרשמה: מייל, סיסמה, שם מלא ומספר וואטסאפ — הכל חובה
-$('#aUp').onclick = () => { $('#signupMore').style.display = ''; $('#aName').focus(); aMsg('', true); };
-$('#aUp2').onclick = async () => {
-  const email = $('#aEmail').value.trim(), password = $('#aPass').value, name = $('#aName').value.trim().replace(/\s+/g, ' ');
-  const phone = $('#aPhone').value.trim(), digits = phone.replace(/\D/g, '');
-  if (!email || password.length < 6) return aMsg('כותבים למעלה מייל וסיסמה (6 תווים לפחות).');
+$('#aUp').onclick = () => { location.hash = '#join'; render(); window.scrollTo(0, 0); $('#jName').focus(); };
+window.addEventListener('hashchange', () => render());
+$('#jLogin').onclick = (e) => { e.preventDefault(); history.replaceState(null, '', location.pathname); render(); $('#aEmail').focus(); };
+$('#jGo').onclick = () => doSignup({ email: $('#jEmail').value.trim(), password: $('#jPass').value, name: $('#jName').value, phone: $('#jPhone').value, msg: (t) => { const m = $('#jMsg'); m.className = 'msg err'; m.textContent = t; }, btn: $('#jGo') });
+$('#aUp2').onclick = () => doSignup({ email: $('#aEmail').value.trim(), password: $('#aPass').value, name: $('#aName').value, phone: $('#aPhone').value, msg: aMsg, btn: $('#aUp2') });
+async function doSignup({ email, password, name, phone, msg: aMsg, btn }) {
+  name = name.trim().replace(/\s+/g, ' '); phone = phone.trim();
+  const digits = phone.replace(/\D/g, '');
+  if (name.split(' ').filter((x) => x.length >= 2).length < 2) return aMsg('כותבים שם מלא — שם פרטי ושם משפחה.');
+  if (!email || password.length < 6) return aMsg('כותבים מייל וסיסמה (6 תווים לפחות).');
   if (name.split(' ').filter((x) => x.length >= 2).length < 2) return aMsg('כותבים שם מלא — שם פרטי ושם משפחה.');
   if (!(/^0?5\d{8}$/.test(digits) || /^9725\d{8}$/.test(digits) || (phone.trim().startsWith('+') && digits.length >= 9 && digits.length <= 15))) return aMsg('מספר הוואטסאפ לא נראה תקין. כותבים למשל 050-1234567.');
-  $('#aUp2').disabled = true;
+  btn.disabled = true;
   try {
     const { data, error } = await SB.auth.signUp({ email, password, options: { data: { app: 'flights', name, phone }, emailRedirectTo: location.origin + location.pathname } });
     if (error) return aMsg(heErr(error));
@@ -1150,9 +1194,10 @@ $('#aUp2').onclick = async () => {
     await rpc('ft_me').catch(() => null);
     if (!(await rpc('ft_save_profile', { p_name: name, p_whatsapp: phone }).catch(() => false))) aMsg('נרשמת, אבל המספר לא נשמר — אפשר לתקן ב"👤 החשבון שלי".');
     $('#signupMore').style.display = 'none';
+    history.replaceState(null, '', location.pathname);
     afterLogin();
-  } finally { $('#aUp2').disabled = false; }
-};
+  } finally { btn.disabled = false; }
+}
 $('#aForgot').onclick = async () => {
   const email = $('#aEmail').value.trim(); if (!email) return aMsg('כותבים קודם את המייל, ואז "שכחתי סיסמה".');
   const { error } = await SB.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
