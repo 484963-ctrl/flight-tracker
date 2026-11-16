@@ -218,7 +218,7 @@
 
   <div class="box" id="chBox">
     <b style="font-size:18px">👤 החשבון שלי · איפה לקבל התראות</b>
-    <div class="note" style="margin-top:2px">ההודעות: התראה על כל ירידה במחיר, וסיכום כל בוקר.</div>
+    <div class="note" style="margin-top:2px" id="chNote">ההודעות: התראה על כל ירידה במחיר, וסיכום כל בוקר.</div>
     <div class="form" style="margin-top:10px">
       <label>השם שלי (לברכה בהודעות)<input id="pName" maxlength="40" style="width:200px" placeholder="למשל: משפחת כהן"></label>
       <label>מספר וואטסאפ<input id="pWa" style="width:170px" dir="ltr" placeholder="050-1234567"></label>
@@ -758,7 +758,7 @@ function tripForm(p, w = {}) {
 
       ${(() => { const px = paxOf(w), sel = (id, v, from, to, lbl) => `<label>${lbl}<select id="${p}${id}">${Array.from({ length: to - from + 1 }, (_, i) => i + from).map((n) => `<option value="${n}" ${n === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>`;
         return sel('PA', px.adults, 1, 9, '🎫 מבוגרים (12+)') + sel('PC', px.children, 0, 8, 'ילדים (2–11)') + sel('PI', px.infants, 0, 4, 'תינוקות (עד 2)'); })()}
-      <label>להתריע מתחת ל-₪ (לכל הנוסעים)<input type="number" id="${p}Target" min="0" step="10" placeholder="למשל 1800" value="${w.target || ''}"></label>
+      <label>${ME && !ME.admin ? '🎯 המחיר שאני מחכה לו: ₪ לכל הנוסעים (חובה)' : 'להתריע מתחת ל-₪ (לכל הנוסעים)'}<input type="number" id="${p}Target" min="0" step="10" placeholder="למשל 1800" value="${w.target || ''}"></label>
       <label class="chip" style="align-self:flex-end" title="לא טסים ולא נוחתים מ-3 שעות לפני השקיעה של ערב שבת/חג ועד 3 שעות אחרי צאת השבת (50 דקות אחרי השקיעה)"><input type="checkbox" id="${p}NoSh" ${w.noShabbat === false ? '' : 'checked'}> 🕯️ בלי טיסות בשבת וחג</label>
     </div>
     <div class="mode"><button type="button" data-mode="${p}" data-m="air" class="${w.dest ? '' : 'on'}">✈️ אני יודע לאיזה שדה תעופה</button><button type="button" data-mode="${p}" data-m="place" class="${w.dest ? 'on' : ''}">🎯 אני יודע לאן אני נוסע<small>והמערכת תמצא את השדות הקרובים</small></button></div>
@@ -797,6 +797,7 @@ function readTrip(p) {
     drive: modeOf(p) === 'place' && DEST[p] ? Object.fromEntries(Object.entries(DEST[p].drive).filter(([, t]) => t <= DEST[p].hours * 3600)) : null };
 }
 function checkTrip(t) {
+  if (ME && !ME.admin && !t.target) return 'כותבים את המחיר שאתה מחכה לו (לכל הנוסעים) — ההודעה תגיע כשהמחיר יגיע אליו.';
   if (t.cities && !t.cities.length) return t.mode === 'place' ? (t.dest ? 'צריך להשאיר מסומן לפחות שדה תעופה אחד ברשימה.' : 'כותבים לאן נוסעים ובוחרים מהרשימה (או מהמפה).') : 'צריך לסמן לפחות שדה תעופה אחד.';
   if (!t.outFrom || !t.outTo || !t.backFrom || !t.backTo) return 'צריך למלא "החל מ" ו"עד" בהלוך ובחזור (או ללחוץ "📅 בלי גמישות").';
   if (t.outTo <= t.outFrom || t.backTo <= t.backFrom) return 'ה"עד" צריך להיות אחרי ה"החל מ".';
@@ -982,6 +983,7 @@ const CHN = {
 const BOT = 'moshe_flights_bot', SYSNUM = '053-828-3601', SYSNUM_INT = '972538283601';
 function renderChannels(can) {
   if (!ME) return;
+  $('#chNote').textContent = ME.admin ? 'ההודעות: התראה על כל ירידה במחיר, וסיכום כל בוקר.' : 'ההודעות: כשהמחיר מגיע למחיר שקבעת (ושוב אם הוא ממשיך לרדת), והודעה אחת כשטיול חדש נבדק לראשונה.';
   const ch = (SET.channels) || { telegram: true, whatsapp: true, email: true };
   if (document.activeElement !== $('#pName')) $('#pName').value = ME.name || '';
   if (document.activeElement !== $('#pWa')) $('#pWa').value = ME.whatsapp || '';

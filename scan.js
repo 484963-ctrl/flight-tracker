@@ -358,6 +358,7 @@ function saveChannelStatus() {
     if (!st.firstDone && q.firstDone) st.firstDone = q.firstDone;
     if (st.last == null && q.last != null) st.last = q.last;
     if (st.under == null && q.under != null) st.under = q.under;
+    if (st.alertP == null && q.alertP != null) st.alertP = q.alertP;
   }
   const notes = []; // { owner, text } — owner null = מערכת (למנהל)
   const note = (owner, text) => notes.push({ owner: owner || null, text });
@@ -630,9 +631,17 @@ function saveChannelStatus() {
     const firstUnder = under && !s.under;
     const day = h.filter((x) => x.t !== now.toISOString() && now - new Date(x.t) < 24 * 3600e3).map((x) => x.price);
     const ref = day.length ? Math.min(...day) : s.last; // ירידה = מתחת למחיר הכי נמוך ב-24 השעות האחרונות
-    if (firstUnder || (ref != null && ref - price >= minDrop))
-      alerts.push({ w, r: wOut[w.id], price, why: under ? 'target' : 'drop', from: ref, lowest: h.length > 1 && price <= Math.min(...h.map((x) => x.price)) });
-    if (w.target) s.under = under ? true : price > w.target + minDrop ? false : s.under;
+    // המנהל (ובעתיד מנויים): כל ירידה. משתמש חינמי: רק כשהמחיר מגיע למחיר היעד שלו — ושוב אם ממשיך לרדת מתחתיו
+    const full = !USERS || !w.owner || (USERS[w.owner] && USERS[w.owner].admin);
+    const lowest = h.length > 1 && price <= Math.min(...h.map((x) => x.price));
+    if (full) {
+      if (firstUnder || (ref != null && ref - price >= minDrop))
+        alerts.push({ w, r: wOut[w.id], price, why: under ? 'target' : 'drop', from: ref, lowest });
+    } else if (under && (firstUnder || (s.alertP != null && s.alertP - price >= minDrop))) {
+      alerts.push({ w, r: wOut[w.id], price, why: 'target', from: s.alertP ?? ref, lowest });
+      s.alertP = price;
+    }
+    if (w.target) { s.under = under ? true : price > w.target + minDrop ? false : s.under; if (!s.under) s.alertP = null; }
     s.last = price;
   }
   for (const id of Object.keys(state)) if (id !== '_sys' && id !== '_bp' && id !== '_rt' && !allWatches.find((w) => w.id === id)) delete state[id];
@@ -642,7 +651,8 @@ function saveChannelStatus() {
   const ilDate = `${il.find((x) => x.type === 'year').value}-${il.find((x) => x.type === 'month').value}-${il.find((x) => x.type === 'day').value}`;
   const ilHour = +il.find((x) => x.type === 'hour').value % 24;
   if (!ONLY_NEW && ilHour >= 8 && sys.daily !== ilDate && allWatches.length) {
-    for (const owner of [...new Set(allWatches.map((w) => w.owner || null))]) {
+    // סיכום בוקר — רק למנהל (בעתיד: למנויים)
+    for (const owner of [...new Set(allWatches.map((w) => w.owner || null))].filter((o) => !USERS || !o || (USERS[o] && USERS[o].admin))) {
       const ws = allWatches.filter((w) => (w.owner || null) === owner);
       const nm = [...new Set(ws.map((w) => w.who).filter(Boolean))], who = nm.length === 1 && ws.every((w) => w.who === nm[0]) ? nm[0] : ownerName(owner);
       const L = [`☀️ בוקר טוב${who ? ', ' + who : ''}! המחירים של הבוקר:`];
@@ -672,7 +682,7 @@ function saveChannelStatus() {
     for (const w of watches) if (wOut[w.id]) q.watches[w.id] = { ...wOut[w.id], t: now.toISOString() };
     for (const [id, r] of Object.entries(q.watches)) if (!r.t || new Date(r.t) < old) delete q.watches[id];
     q.at = now.toISOString(); q.fx = fx;
-    for (const w of watches) { const st = state[w.id]; if (st && st.firstDone) s2[w.id] = { firstDone: st.firstDone, last: st.last ?? null, under: st.under ?? null, t: now.toISOString() }; }
+    for (const w of watches) { const st = state[w.id]; if (st && st.firstDone) s2[w.id] = { firstDone: st.firstDone, last: st.last ?? null, under: st.under ?? null, alertP: st.alertP ?? null, t: now.toISOString() }; }
     for (const [id, r] of Object.entries(s2)) if (!id.startsWith('_') && r && r.t && new Date(r.t) < old) delete s2[id];
     wr('data/quick.json', q); wr('data/state-quick.json', s2);
     for (const owner of [...new Set(alerts.map((x) => x.w.owner || null))])
