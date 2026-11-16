@@ -482,7 +482,7 @@ async function destCompute(p, lat, lon, name, nd) {
   // המפה פתוחה? עוברים למקום שנבחר ומסמנים אותו
   const mp = $(`#${p}DMap`); if (mp && mp._map) { mp._map.setView([lat, lon], 8); if (mp._mk) mp._mk.setLatLng([lat, lon]); else mp._mk = window.L_.marker([lat, lon]).addTo(mp._map); }
   m.className = 'msg'; m.textContent = '🚗 מחשב זמני נסיעה…';
-  const cand = Object.entries(AIRP).map(([c, a]) => [c, a, hav(lat, lon, a[1], a[2])]).filter((x) => x[2] <= 8 * 110 + 50).sort((x, y) => x[2] - y[2]).slice(0, 99).map(([c, a]) => [c, a]);
+  const cand = Object.entries(AIRP).filter(([c]) => c !== (CFG.origin || 'TLV') && !['ETM', 'HFA', 'SDV', 'VDA'].includes(c)).map(([c, a]) => [c, a, hav(lat, lon, a[1], a[2])]).filter((x) => x[2] <= 8 * 110 + 50).sort((x, y) => x[2] - y[2]).slice(0, 99).map(([c, a]) => [c, a]);
   const drive = {};
   if (cand.length) {
     const coords = [[lon, lat], ...cand.map(([, a]) => [a[2], a[1]])].map((x) => x.join(',')).join(';');
