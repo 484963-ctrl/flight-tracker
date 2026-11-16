@@ -208,6 +208,7 @@
   <div class="sec">🧳 הטיולים שלי במעקב</div>
   <div class="cards" id="cards"></div>
 
+  <div class="box" id="limitBox" style="display:none;background:#f3f7ff;border-color:#cfdcff"></div>
   <div class="box" id="addBox">
     <b style="font-size:18px">➕ טיול חדש למעקב</b>
     <div id="fForm" style="margin-top:10px"></div>
@@ -281,7 +282,7 @@ async function getFile(p, fallback) {
 
 async function saveWatches(list) {
   const ok = await rpc('ft_save_watches', { data: list });
-  if (!ok) throw new Error('לא נשמר — צריך להיכנס שוב לחשבון');
+  if (!ok) throw new Error(ME && !ME.admin && list.length > W.length ? 'לא נשמר — בחשבון החינמי אפשר לעקוב אחרי טיול אחד.' : 'לא נשמר — צריך להיכנס שוב לחשבון');
   W = list;
   pending = Date.now();
   render();
@@ -313,7 +314,11 @@ function render() {
   const can = !!ME && !ME.blocked;
   $('#btnKey').textContent = ME ? '👤 ' + (ME.name || ME.email) : '👤 כניסה / הרשמה';
   if (!ME && !$('#authNewPass').offsetParent) $('#keyBox').style.display = '';
-  $('#addBox').style.display = can ? '' : 'none';
+  // חשבון חינמי: טיול אחד. מגיעים למגבלה — במקום הטופס, הסבר
+  const full = ME && !ME.admin && W.length >= (ME.max_trips ?? 1);
+  $('#addBox').style.display = can && !full ? '' : 'none';
+  $('#limitBox').style.display = can && full ? '' : 'none';
+  if (full) $('#limitBox').innerHTML = `🎫 <b>בחשבון החינמי אפשר לעקוב אחרי ${(ME.max_trips ?? 1) === 1 ? 'טיול אחד' : (ME.max_trips + ' טיולים')}.</b> כדי לעקוב אחרי טיול אחר — עורכים את הטיול הקיים (✎ עריכה), או מוחקים אותו ומוסיפים חדש.`;
   $('#chBox').style.display = ME ? '' : 'none';
   $('#waitBox').style.display = ME && !ME.approved ? '' : 'none';
   $('#admBox').style.display = ME && ME.admin ? '' : 'none';
@@ -1030,7 +1035,7 @@ let ADM = null;
 async function renderAdmin(force) {
   if (!ADM || force) { try { ADM = await rpc('ft_admin_list'); } catch { ADM = []; } try { $('#admInvSt').textContent = (await rpc('ft_admin_has_invite')) ? '✓ יש קוד פעיל' : '✗ עוד אין קוד — בלי קוד אי אפשר להצטרף'; } catch {} }
   $('#admList').innerHTML = !ADM.length ? '<div class="note">עוד אין משתמשים.</div>' : `<table><tr><th>משתמש</th><th>טיולים</th><th>טלגרם</th><th>וואטסאפ</th><th>מצב</th><th></th></tr>${ADM.map((u) => `<tr>
-    <td>${esc(u.name || '—')}<span class="small"><bdi dir="ltr">${esc(u.email || '')}</bdi></span></td><td>${u.trips}</td><td>${u.tg ? '✓' : '—'}</td><td>${u.whatsapp ? `<span class="ltr">${esc(u.whatsapp)}</span>${u.wa_ok ? ' ✓' : ' <span class="small">(עוד לא אישר בוואטסאפ)</span>'}` : '—'} <button data-wa="${u.id}" data-cur="${esc(u.whatsapp || '')}" title="שינוי מספר" style="padding:2px 8px">✎</button></td>
+    <td>${esc(u.name || '—')}<span class="small"><bdi dir="ltr">${esc(u.email || '')}</bdi></span></td><td>${u.admin ? u.trips : `${u.trips} / <select data-max="${u.id}" title="כמה טיולים מותר">${[0, 1, 2, 3, 5, 10, 30].map((n) => `<option ${n === (u.max_trips ?? 1) ? 'selected' : ''}>${n}</option>`).join('')}</select>`}</td><td>${u.tg ? '✓' : '—'}</td><td>${u.whatsapp ? `<span class="ltr">${esc(u.whatsapp)}</span>${u.wa_ok ? ' ✓' : ' <span class="small">(עוד לא אישר בוואטסאפ)</span>'}` : '—'} <button data-wa="${u.id}" data-cur="${esc(u.whatsapp || '')}" title="שינוי מספר" style="padding:2px 8px">✎</button></td>
     <td>${u.admin ? '⭐ מנהל' : u.blocked ? '⛔ חסום' : u.approved ? '✅ מאושר' : u.invited ? '⏳ ממתין לאישור' : '⏳ בלי קוד הזמנה'}</td>
     <td>${u.admin ? '' : `${!u.approved || u.blocked ? `<button data-adm="${u.id}" data-a="1" data-b="0">✅ אישור</button>` : ''} ${!u.blocked ? `<button data-adm="${u.id}" data-a="${u.approved ? 1 : 0}" data-b="1">⛔ חסימה</button>` : ''}`}</td></tr>`).join('')}</table>`;
   document.querySelectorAll('[data-wa]').forEach((b) => b.onclick = () => {
@@ -1043,6 +1048,10 @@ async function renderAdmin(force) {
       $('#admMsg').textContent = ok ? '✓ המספר עודכן. אם הוא השתנה — המשתמש צריך לשלוח "שלום" מהמספר החדש ולענות "כן", ורק אז ההתראות יגיעו אליו.' : 'המספר לא נראה תקין. כותבים למשל 050-1234567.';
       if (ok) renderAdmin(true);
     };
+  });
+  document.querySelectorAll('[data-max]').forEach((s_) => s_.onchange = async () => {
+    const ok = await rpc('ft_admin_set_max', { p_uid: s_.dataset.max, p_max: +s_.value }).catch(() => false);
+    $('#admMsg').className = 'msg ' + (ok ? 'ok' : 'err'); $('#admMsg').textContent = ok ? `✓ עכשיו מותר ${s_.value} טיולים למשתמש הזה.` : 'לא עודכן.'; renderAdmin(true);
   });
   document.querySelectorAll('[data-adm]').forEach((b) => b.onclick = async () => {
     const ok = await rpc('ft_admin_set', { p_uid: b.dataset.adm, p_approved: b.dataset.a === '1', p_blocked: b.dataset.b === '1' }).catch(() => false);
@@ -1096,6 +1105,7 @@ $('#fAdd').onclick = async () => {
   const err = checkTrip(w);
   if (err) return m.textContent = err;
   if (w.out < new Date().toISOString().slice(0, 10)) return m.textContent = 'תאריך ההלוך כבר עבר.';
+  if (ME && !ME.admin && W.length >= (ME.max_trips ?? 1)) return m.textContent = 'בחשבון החינמי אפשר לעקוב אחרי טיול אחד.';
   if (W.find((x) => JSON.stringify(citiesOfW(x)) === JSON.stringify(w.cities) && x.out === w.out && x.back === w.back && JSON.stringify(airsOf(x)) === JSON.stringify(w.airlines) && JSON.stringify(paxOf(x)) === JSON.stringify(w.pax) && JSON.stringify([...winOf(x, 'out'), ...winOf(x, 'back')]) === JSON.stringify([w.outFrom, w.outTo, w.backFrom, w.backTo]))) return m.textContent = 'הטיול הזה כבר במעקב.';
   $('#fAdd').disabled = true;
   m.className = 'msg'; m.textContent = 'שומר…';

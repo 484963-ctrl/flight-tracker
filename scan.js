@@ -389,6 +389,17 @@ function saveChannelStatus() {
     console.log(`בדיקה מהירה: ${watches.length} טיולים חדשים/ששונו`);
     if (QUICK && !watches.length) return;
   }
+  // כמה פעמים לבדוק כל טיול — לפי כמה הטיסה קרובה: עד חודש — כל ריצה (חצי שעה), עד חצי שנה — כל שעתיים, רחוק יותר — כל 12 שעות
+  const dueEvery = (w) => { const days = (new Date((w.outFrom || w.out || '').slice(0, 10) + 'T12:00:00Z') - now) / 864e5; return days <= 31 ? 0 : days <= 183 ? 2 * 3600e3 - 5 * 60e3 : 12 * 3600e3 - 5 * 60e3; };
+  const skipped = [];
+  if (!ONLY_NEW && !process.env.FULL) {
+    const keep = [];
+    for (const w of watches) {
+      const st = state[w.id] || {}, ev = dueEvery(w), have = (prev.watches || {})[w.id] || quickF.watches[w.id];
+      if (ev && have && st.lastChk && now - new Date(st.lastChk) < ev) skipped.push(w); else keep.push(w);
+    }
+    if (skipped.length) { console.log(`לא נבדקים הפעם (טיסה רחוקה, נבדקו לאחרונה): ${skipped.length}`); watches = keep; subs = mkSubs(watches); }
+  }
   // הבדיקות נעצרו לזמן ארוך? מודיעים שחזרו לעבוד
   if (!ONLY_NEW && prev.updated && now - new Date(prev.updated) > 90 * 60e3 && sys.gapFor !== prev.updated) {
     const h = Math.round((now - new Date(prev.updated)) / 36e5 * 10) / 10;
@@ -461,6 +472,7 @@ function saveChannelStatus() {
   const alerts = [];
   // בבדיקה מהירה — שאר הטיולים נשארים עם התוצאות הקודמות
   const wOut = ONLY_NEW ? Object.fromEntries(Object.entries(prev.watches || {}).filter(([id]) => allWatches.some((w) => w.id === id))) : {};
+  for (const w of skipped) { const x = (prev.watches || {})[w.id] || quickF.watches[w.id]; if (x) wOut[w.id] = x; }
   // שלב 1: לפי המחירים לכיוון אחד — אילו צירופי תאריכים כדאי לבדוק כהלוך-חזור
   const plan = {};
   for (const w of subs) {
@@ -595,6 +607,7 @@ function saveChannelStatus() {
       L.push('', 'מעכשיו: בדיקה כל חצי שעה, והודעה על כל ירידה.' + footer());
       note(w.owner, L.join('\n'));
     }
+    (state[w.id] = state[w.id] || {}).lastChk = now.toISOString(); // מתי נבדק לאחרונה (לתדירות לפי מרחק הטיסה)
     if (price == null) continue;
     const h = (wHist[w.id] = wHist[w.id] || []);
     if (!h.length || h[h.length - 1].price !== price) h.push({ t: now.toISOString(), price });
@@ -620,9 +633,9 @@ function saveChannelStatus() {
   const il = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false }).formatToParts(now);
   const ilDate = `${il.find((x) => x.type === 'year').value}-${il.find((x) => x.type === 'month').value}-${il.find((x) => x.type === 'day').value}`;
   const ilHour = +il.find((x) => x.type === 'hour').value % 24;
-  if (!ONLY_NEW && ilHour >= 8 && sys.daily !== ilDate && watches.length) {
-    for (const owner of [...new Set(watches.map((w) => w.owner || null))]) {
-      const ws = watches.filter((w) => (w.owner || null) === owner);
+  if (!ONLY_NEW && ilHour >= 8 && sys.daily !== ilDate && allWatches.length) {
+    for (const owner of [...new Set(allWatches.map((w) => w.owner || null))]) {
+      const ws = allWatches.filter((w) => (w.owner || null) === owner);
       const nm = [...new Set(ws.map((w) => w.who).filter(Boolean))], who = nm.length === 1 && ws.every((w) => w.who === nm[0]) ? nm[0] : ownerName(owner);
       const L = [`☀️ בוקר טוב${who ? ', ' + who : ''}! המחירים של הבוקר:`];
       for (const w of ws) {
