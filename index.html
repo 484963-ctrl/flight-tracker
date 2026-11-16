@@ -192,6 +192,15 @@
         <button id="aUp">הרשמה (חשבון חדש)</button>
         <button id="aForgot" style="background:none;border:0;color:var(--mute);text-decoration:underline">שכחתי סיסמה</button>
       </div>
+      <div id="signupMore" style="display:none;margin-top:12px;padding:12px;border:1.5px solid var(--line);border-radius:14px;background:#fbfcff">
+        <b>📝 חשבון חדש — עוד שני פרטים</b>
+        <div class="form" style="margin-top:8px">
+          <label>שם מלא (פרטי ומשפחה)<input id="aName" maxlength="40" autocomplete="name" placeholder="למשל: יוסי כהן" style="width:220px"></label>
+          <label>מספר וואטסאפ — לשם יגיעו ההודעות<input id="aPhone" type="tel" autocomplete="tel" dir="ltr" placeholder="050-1234567" style="width:180px"></label>
+          <button class="pri" id="aUp2">✅ הרשמה</button>
+        </div>
+        <div class="note">אחרי ההרשמה החשבון ממתין לאישור. מיד אחרי האישור תגיע הודעה בוואטסאפ למספר הזה.</div>
+      </div>
     </div>
     <div id="authNewPass" style="display:none">
       <b style="font-size:18px">🔑 סיסמה חדשה</b>
@@ -1125,13 +1134,24 @@ $('#aIn').onclick = async () => {
   if (error) return aMsg(heErr(error)); afterLogin();
 };
 $('#aPass').onkeydown = (e) => { if (e.key === 'Enter') $('#aIn').click(); };
-$('#aUp').onclick = async () => {
-  const email = $('#aEmail').value.trim(), password = $('#aPass').value;
-  if (!email || password.length < 6) return aMsg('כותבים מייל וסיסמה (6 תווים לפחות), ואז "הרשמה".');
-  const { data, error } = await SB.auth.signUp({ email, password, options: { data: { app: 'flights' }, emailRedirectTo: location.origin + location.pathname } });
-  if (error) return aMsg(heErr(error));
-  if (!data.session) { const r = await SB.auth.signInWithPassword({ email, password }); if (r.error) return aMsg(heErr(r.error)); }
-  afterLogin();
+// הרשמה: מייל, סיסמה, שם מלא ומספר וואטסאפ — הכל חובה
+$('#aUp').onclick = () => { $('#signupMore').style.display = ''; $('#aName').focus(); aMsg('', true); };
+$('#aUp2').onclick = async () => {
+  const email = $('#aEmail').value.trim(), password = $('#aPass').value, name = $('#aName').value.trim().replace(/\s+/g, ' ');
+  const phone = $('#aPhone').value.trim(), digits = phone.replace(/\D/g, '');
+  if (!email || password.length < 6) return aMsg('כותבים למעלה מייל וסיסמה (6 תווים לפחות).');
+  if (name.split(' ').filter((x) => x.length >= 2).length < 2) return aMsg('כותבים שם מלא — שם פרטי ושם משפחה.');
+  if (!(/^0?5\d{8}$/.test(digits) || /^9725\d{8}$/.test(digits) || (phone.trim().startsWith('+') && digits.length >= 9 && digits.length <= 15))) return aMsg('מספר הוואטסאפ לא נראה תקין. כותבים למשל 050-1234567.');
+  $('#aUp2').disabled = true;
+  try {
+    const { data, error } = await SB.auth.signUp({ email, password, options: { data: { app: 'flights', name, phone }, emailRedirectTo: location.origin + location.pathname } });
+    if (error) return aMsg(heErr(error));
+    if (!data.session) { const r = await SB.auth.signInWithPassword({ email, password }); if (r.error) return aMsg(heErr(r.error)); }
+    await rpc('ft_me').catch(() => null);
+    if (!(await rpc('ft_save_profile', { p_name: name, p_whatsapp: phone }).catch(() => false))) aMsg('נרשמת, אבל המספר לא נשמר — אפשר לתקן ב"👤 החשבון שלי".');
+    $('#signupMore').style.display = 'none';
+    afterLogin();
+  } finally { $('#aUp2').disabled = false; }
 };
 $('#aForgot').onclick = async () => {
   const email = $('#aEmail').value.trim(); if (!email) return aMsg('כותבים קודם את המייל, ואז "שכחתי סיסמה".');
