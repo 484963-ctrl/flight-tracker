@@ -538,6 +538,7 @@ document.addEventListener('click', (e) => {
 });
 // עברית ← כמה כתיבים לטיניים אפשריים (לחיפוש כפרים שאין להם שם עברי במפות)
 // עברית ← כמה כתיבים לטיניים אפשריים (לחיפוש מקום)
+const COUNTRY_HE = { 'אוסטריה': 'AT', 'איטליה': 'IT', 'שוויץ': 'CH', 'שווייץ': 'CH', 'גרמניה': 'DE', 'צרפת': 'FR', 'ספרד': 'ES', 'יוון': 'GR', 'פורטוגל': 'PT', 'הולנד': 'NL', 'בלגיה': 'BE', 'צ׳כיה': 'CZ', "צ'כיה": 'CZ', 'הונגריה': 'HU', 'פולין': 'PL', 'קרואטיה': 'HR', 'סלובניה': 'SI', 'סלובקיה': 'SK', 'רומניה': 'RO', 'בולגריה': 'BG', 'אנגליה': 'GB', 'בריטניה': 'GB', 'סקוטלנד': 'GB', 'אירלנד': 'IE', 'קפריסין': 'CY', 'טורקיה': 'TR', 'ארה״ב': 'US', 'ארה"ב': 'US', 'אמריקה': 'US', 'קנדה': 'CA', 'תאילנד': 'TH', 'יפן': 'JP', 'גאורגיה': 'GE', 'גרוזיה': 'GE', 'מונטנגרו': 'ME', 'סרביה': 'RS', 'נורבגיה': 'NO', 'שבדיה': 'SE', 'פינלנד': 'FI', 'דנמרק': 'DK', 'מרוקו': 'MA', 'מצרים': 'EG', 'ירדן': 'JO', 'הודו': 'IN', 'סין': 'CN', 'מקסיקו': 'MX', 'ברזיל': 'BR', 'ארגנטינה': 'AR', 'לוקסמבורג': 'LU', 'מלטה': 'MT', 'איסלנד': 'IS', 'ליטא': 'LT', 'לטביה': 'LV', 'אסטוניה': 'EE', 'אלבניה': 'AL', 'אוסטרליה': 'AU' };
 function translit(q) {
   const m = { 'א': 'a', 'ב': 'b', 'ג': 'g', 'ד': 'd', 'ה': 'h', 'ז': 'z', 'ח': 'ch', 'ט': 't', 'כ': 'k', 'ך': 'ch', 'ל': 'l', 'מ': 'm', 'ם': 'm', 'נ': 'n', 'ן': 'n', 'ס': 's', 'ע': 'a', 'פ': 'p', 'ף': 'f', 'צ': 'tz', 'ץ': 'tz', 'ק': 'k', 'ר': 'r', 'ש': 'sh', 'ת': 't' };
   const geresh = { 'ג': 'j', 'ז': 'j', 'צ': 'ch', 'ט': 't', 'ד': 'd' };
@@ -561,7 +562,7 @@ function translit(q) {
     out.push(s);
   }
   const base = out.join(' ');
-  const v = new Set([base, base.replace(/^k/, 'c').replace(/ k/g, ' c'), base.replace(/k/g, 'c'), base.replace(/o/g, 'u'), base.replace(/ai/g, 'ay').replace(/^k/, 'c'), base.replace(/tz/g, 'z'), base.replace(/sh/g, 's'), base.replace(/ei$/, 'ai')]);
+  const v = new Set([base, base.replace(/sh/g, 'sch'), base.replace(/^k/, 'c').replace(/ k/g, ' c'), base.replace(/k/g, 'c'), base.replace(/o/g, 'u'), base.replace(/ai/g, 'ay').replace(/^k/, 'c'), base.replace(/tz/g, 'z'), base.replace(/sh/g, 's'), base.replace(/ei$/, 'ai')]);
   return [...v].slice(0, 5);
 }
 // הצעות תוך כדי הקלדה: בעברית — מוויקיפדיה העברית; באנגלית — Photon (OpenStreetMap)
@@ -577,17 +578,21 @@ document.addEventListener('input', (e) => {
     try {
       const placeRank = (x) => ['city', 'town', 'village', 'municipality'].includes(x.osm_value) ? 0 : ['hamlet', 'suburb'].includes(x.osm_value) ? 1 : 2;
       const inEu = (lat, lon) => lat > 34 && lat < 62 && lon > -11 && lon < 32;
-      const photon = (t, n) => fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(t)}&limit=${n}&lang=en&osm_tag=place&bbox=-11,34,32,62`).then((r) => r.json())
-        .then((d) => (d.features || []).sort((a, b) => placeRank(a.properties) - placeRank(b.properties)).map((f) => ({ name: f.properties.name, desc: [f.properties.state, f.properties.country].filter(Boolean).join(', '), lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] }))).catch(() => []);
-      if (/[\u0590-\u05FF]/.test(q)) {
+      const photon = (t, n, cc) => fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(t)}&limit=${cc ? n * 3 : n}&lang=en&osm_tag=place${cc ? '' : '&bbox=-11,34,32,62'}`).then((r) => r.json())
+        .then((d) => (d.features || []).sort((a, b) => placeRank(a.properties) - placeRank(b.properties)).map((f) => ({ name: f.properties.name, desc: [f.properties.state, f.properties.country].filter(Boolean).join(', '), cc: f.properties.countrycode, lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] }))).catch(() => []);
+      // שם מדינה בחיפוש ("שלדמינג אוסטריה") — מוציאים אותו מהחיפוש ומסננים לפיו
+      let cc = null, qq = q;
+      for (const [w, c] of Object.entries(COUNTRY_HE)) { const re = new RegExp('(^|\\s)' + w + '(\\s|$)'); if (re.test(qq)) { cc = c; qq = qq.replace(re, ' ').trim(); break; } }
+      if (/[\u0590-\u05FF]/.test(qq)) {
         // ויקיפדיה העברית (מקומות מוכרים) + המרה לאותיות לטיניות (כפרים קטנים)
         const [wk, ...tl] = await Promise.all([
-          fetch(`https://he.wikipedia.org/w/api.php?action=query&format=json&origin=*&generator=prefixsearch&gpssearch=${encodeURIComponent(q)}&gpslimit=10&prop=coordinates|description|langlinks&lllang=en&lllimit=1`).then((r) => r.json()).catch(() => ({})),
-          ...translit(q).slice(0, 3).map((t) => photon(t, 3))]);
-        list = Object.values((wk.query && wk.query.pages) || {}).filter((x) => x.coordinates && inEu(x.coordinates[0].lat, x.coordinates[0].lon)).sort((a, b) => a.index - b.index)
+          fetch(`https://he.wikipedia.org/w/api.php?action=query&format=json&origin=*&generator=prefixsearch&gpssearch=${encodeURIComponent(qq)}&gpslimit=10&prop=coordinates|description|langlinks&lllang=en&lllimit=1`).then((r) => r.json()).catch(() => ({})),
+          ...translit(qq).slice(0, 4).map((t) => photon(t, 4, cc))]);
+        list = Object.values((wk.query && wk.query.pages) || {}).filter((x) => x.coordinates && (cc || inEu(x.coordinates[0].lat, x.coordinates[0].lon))).sort((a, b) => a.index - b.index)
           .map((x) => ({ he: x.title, name: (x.langlinks && x.langlinks[0] && x.langlinks[0]['*']) || x.title, desc: x.description || '', lat: x.coordinates[0].lat, lon: x.coordinates[0].lon }));
         list.push(...tl.flat());
-      } else list = await photon(q, 8);
+      } else list = await photon(qq, 8, cc);
+      if (cc) list = list.filter((x) => !x.cc || x.cc === cc);
       const seen = new Set();
       list = list.filter((x) => { const k = x.name + '|' + Math.round(x.lat * 10) + '|' + Math.round(x.lon * 10); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 7);
     } catch {}
