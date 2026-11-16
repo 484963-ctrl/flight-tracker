@@ -621,8 +621,11 @@ document.addEventListener('input', (e) => {
     try {
       const placeRank = (x) => ['city', 'town', 'village', 'municipality'].includes(x.osm_value) ? 0 : ['hamlet', 'suburb'].includes(x.osm_value) ? 1 : 2;
       const inEu = (lat, lon) => lat > 34 && lat < 62 && lon > -11 && lon < 32;
-      const photon = (t, n, cc) => fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(t)}&limit=${cc ? n * 3 : n}&lang=en&osm_tag=place${cc ? '' : '&bbox=-11,34,32,62'}`).then((r) => r.json())
-        .then((d) => (d.features || []).sort((a, b) => placeRank(a.properties) - placeRank(b.properties)).map((f) => ({ name: f.properties.name, desc: [f.properties.state, f.properties.country].filter(Boolean).join(', '), cc: f.properties.countrycode, lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] }))).catch(() => []);
+      // דרך השרת שלנו (ft-geo) — כדי שחוסמי פרסומות לא יחסמו; אם לא עובד — ישירות
+      const photon = (t, n, cc) => { const lim = cc ? n * 3 : n, bb = cc ? '' : '-11,34,32,62';
+        return fetch(`${CFG.supabase.url}/functions/v1/ft-geo?q=${encodeURIComponent(t)}&limit=${lim}${bb ? '&bbox=' + bb : ''}`).then((r) => { if (!r.ok) throw 0; return r.json(); })
+          .catch(() => fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(t)}&limit=${lim}&lang=en&osm_tag=place${bb ? '&bbox=' + bb : ''}`).then((r) => r.json()))
+        .then((d) => (d.features || []).sort((a, b) => placeRank(a.properties) - placeRank(b.properties)).map((f) => ({ name: f.properties.name, desc: [f.properties.state, f.properties.country].filter(Boolean).join(', '), cc: f.properties.countrycode, lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] }))).catch(() => []); };
       // שם מדינה בחיפוש ("שלדמינג אוסטריה") — מוציאים אותו מהחיפוש ומסננים לפיו
       let cc = null, qq = q;
       for (const [w, c] of Object.entries(COUNTRY_HE)) { const re = new RegExp('(^|\\s)' + w + '(\\s|$)'); if (re.test(qq)) { cc = c; qq = qq.replace(re, ' ').trim(); break; } }
@@ -636,7 +639,8 @@ document.addEventListener('input', (e) => {
           .map((x) => ({ he: x.title, name: (x.langlinks && x.langlinks[0] && x.langlinks[0]['*']) || x.title, desc: x.description || '', lat: x.coordinates[0].lat, lon: x.coordinates[0].lon }));
         list.push(...tl.flat());
       } else list = await photon(qq, 8, cc);
-      if (cc) list = list.filter((x) => !x.cc || x.cc === cc);
+
+      if (cc) list = list.filter((x) => !x.cc || x.cc === cc); // לפני הקיצור ל-7
       const seen = new Set();
       list = list.filter((x) => { const k = x.name + '|' + Math.round(x.lat * 10) + '|' + Math.round(x.lon * 10); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 7);
     } catch {}
