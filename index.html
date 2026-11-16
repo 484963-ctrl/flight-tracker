@@ -188,7 +188,6 @@
       <div class="form" style="margin-top:10px">
         <label>מייל<input id="aEmail" type="email" autocomplete="username" style="width:230px" dir="ltr"></label>
         <label>סיסמה<input id="aPass" type="password" autocomplete="current-password" style="width:170px" dir="ltr"></label>
-        <label>קוד הזמנה (רק בהרשמה)<input id="aInv" style="width:140px" autocomplete="off"></label>
         <button class="pri" id="aIn">כניסה</button>
         <button id="aUp">הרשמה (חשבון חדש)</button>
         <button id="aForgot" style="background:none;border:0;color:var(--mute);text-decoration:underline">שכחתי סיסמה</button>
@@ -232,8 +231,7 @@
 
   <div class="box" id="admBox" style="display:none">
     <b style="font-size:18px">🛠️ משתמשים (רק למנהל)</b>
-    <div class="form" style="margin-top:8px"><label>🎟️ קוד הזמנה לחברים<input id="admInv" style="width:160px" autocomplete="off" placeholder="לפחות 4 תווים"></label><button id="admInvSave">שמירת קוד</button><span class="small" id="admInvSt" style="align-self:center"></span></div>
-    <div class="note">בלי הקוד אי אפשר להירשם. מי שנרשם עם הקוד מחכה לאישור שלך — ותקבל על זה הודעה. החלפת קוד: הקוד הישן מפסיק לעבוד (מי שכבר נרשם נשאר).</div>
+    <div class="note">כל אחד יכול להירשם. מי שנרשם מחכה לאישור שלך — ותקבל על זה הודעה. עד האישור המערכת לא בודקת לו ולא שולחת לו כלום (גם לא בוואטסאפ).</div>
     <div id="admList" style="margin-top:8px"></div>
     <div class="msg" id="admMsg"></div>
   </div>
@@ -1023,22 +1021,18 @@ $('#pSave').onclick = async () => {
       const t = await token();
       const r = await fetch(`${CFG.supabase.url}/functions/v1/ft-wa-intro`, { method: 'POST', headers: { apikey: CFG.supabase.key, Authorization: 'Bearer ' + t } }).then((x) => x.text()).catch(() => '');
       if (r === 'sent') m.textContent = '✓ נשמר. שלחנו לך עכשיו הודעה בוואטסאפ עם כרטיס איש הקשר של המערכת — שומרים אותו ושולחים "שלום".';
+      else if (r === 'skip' && !ME.approved) m.textContent = '✓ נשמר. אחרי שהחשבון יאושר, תקבל הודעה בוואטסאפ עם כרטיס איש הקשר של המערכת.';
       else if (r === 'limit') m.textContent = '✓ נשמר. (היום כבר נשלחו כמה הודעות פתיחה — שומרים את המספר ושולחים "שלום" לפי ההוראות כאן.)';
     }
   } catch (e) { m.className = 'msg err'; m.textContent = e.message; }
 };
-$('#admInvSave').onclick = async () => {
-  const ok = await rpc('ft_admin_invite', { code: $('#admInv').value }).catch(() => false);
-  $('#admMsg').className = 'msg ' + (ok ? 'ok' : 'err'); $('#admMsg').textContent = ok ? '✓ הקוד נשמר. שולחים לחברים את הקישור לאתר ואת הקוד — ואחרי שהם נרשמים, מאשרים כאן.' : 'הקוד צריך להיות לפחות 4 תווים.';
-  if (ok) { $('#admInv').value = ''; renderAdmin(true); }
-};
 // --- ניהול משתמשים (מנהל) ---
 let ADM = null;
 async function renderAdmin(force) {
-  if (!ADM || force) { try { ADM = await rpc('ft_admin_list'); } catch { ADM = []; } try { $('#admInvSt').textContent = (await rpc('ft_admin_has_invite')) ? '✓ יש קוד פעיל' : '✗ עוד אין קוד — בלי קוד אי אפשר להצטרף'; } catch {} }
+  if (!ADM || force) { try { ADM = await rpc('ft_admin_list'); } catch { ADM = []; } }
   $('#admList').innerHTML = !ADM.length ? '<div class="note">עוד אין משתמשים.</div>' : `<table><tr><th>משתמש</th><th>טיולים</th><th>טלגרם</th><th>וואטסאפ</th><th>מצב</th><th></th></tr>${ADM.map((u) => `<tr>
     <td>${esc(u.name || '—')}<span class="small"><bdi dir="ltr">${esc(u.email || '')}</bdi></span></td><td>${u.admin ? u.trips : `${u.trips} / <select data-max="${u.id}" title="כמה טיולים מותר">${[0, 1, 2, 3, 5, 10, 30].map((n) => `<option ${n === (u.max_trips ?? 1) ? 'selected' : ''}>${n}</option>`).join('')}</select>`}</td><td>${u.tg ? '✓' : '—'}</td><td>${u.whatsapp ? `<span class="ltr">${esc(u.whatsapp)}</span>${u.wa_ok ? ' ✓' : ' <span class="small">(עוד לא אישר בוואטסאפ)</span>'}` : '—'} <button data-wa="${u.id}" data-cur="${esc(u.whatsapp || '')}" title="שינוי מספר" style="padding:2px 8px">✎</button></td>
-    <td>${u.admin ? '⭐ מנהל' : u.blocked ? '⛔ חסום' : u.approved ? '✅ מאושר' : u.invited ? '⏳ ממתין לאישור' : '⏳ בלי קוד הזמנה'}</td>
+    <td>${u.admin ? '⭐ מנהל' : u.blocked ? '⛔ חסום' : u.approved ? '✅ מאושר' : '⏳ ממתין לאישור'}</td>
     <td>${u.admin ? '' : `${!u.approved || u.blocked ? `<button data-adm="${u.id}" data-a="1" data-b="0">✅ אישור</button>` : ''} ${!u.blocked ? `<button data-adm="${u.id}" data-a="${u.approved ? 1 : 0}" data-b="1">⛔ חסימה</button>` : ''}`}</td></tr>`).join('')}</table>`;
   document.querySelectorAll('[data-wa]').forEach((b) => b.onclick = () => {
     const td = b.parentElement;
@@ -1134,13 +1128,9 @@ $('#aPass').onkeydown = (e) => { if (e.key === 'Enter') $('#aIn').click(); };
 $('#aUp').onclick = async () => {
   const email = $('#aEmail').value.trim(), password = $('#aPass').value;
   if (!email || password.length < 6) return aMsg('כותבים מייל וסיסמה (6 תווים לפחות), ואז "הרשמה".');
-  const inv = $('#aInv').value.trim();
-  if (!inv) return aMsg('להרשמה צריך קוד הזמנה — מבקשים אותו ממי ששלח לך את הקישור.');
-  if (!(await rpc('ft_check_invite', { code: inv }).catch(() => false))) return aMsg('קוד ההזמנה לא נכון.');
   const { data, error } = await SB.auth.signUp({ email, password, options: { data: { app: 'flights' }, emailRedirectTo: location.origin + location.pathname } });
   if (error) return aMsg(heErr(error));
   if (!data.session) { const r = await SB.auth.signInWithPassword({ email, password }); if (r.error) return aMsg(heErr(r.error)); }
-  await rpc('ft_join', { code: inv }).catch(() => false);
   afterLogin();
 };
 $('#aForgot').onclick = async () => {

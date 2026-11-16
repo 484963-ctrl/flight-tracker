@@ -273,6 +273,25 @@ async function sendTo(owner, text) {
   if (!u || u.admin) return notify.send(text, { channels });
   return notify.send(text, { user: true, telegram: u.tg_chat || null, whatsapp: u.whatsapp || null, channels });
 }
+// הודעת פתיחה (עם כרטיס איש הקשר של המערכת) למשתמש שאושר ושמר מספר שעוד לא אומת — פעם אחת לכל מספר
+const SYSNUM = '053-828-3601', VCF = 'https://484963-ctrl.github.io/flight-tracker/contact.vcf';
+async function sendIntros() {
+  if (!USERS || QUIET || !process.env.TEXTMEBOT_APIKEY) return;
+  const sb = cfg.supabase;
+  for (const [id, u] of Object.entries(USERS)) {
+    if (!u.wa_intro_due) continue;
+    const x = await fetch(`${sb.url}/rest/v1/rpc/ft_scan_intro`, { method: 'POST', headers: { apikey: sb.key, 'Content-Type': 'application/json' }, body: JSON.stringify({ key: SCAN_KEY, p_uid: id }) }).then((r) => r.json()).catch(() => null);
+    if (!x || !x.whatsapp) continue;
+    const to = '+' + String(x.whatsapp).replace(/\D/g, ''), key = process.env.TEXTMEBOT_APIKEY;
+    const post = (params) => fetch('https://api.textmebot.com/send.php', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: Object.entries({ apikey: key, recipient: to, ...params }).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&') }).catch(() => {});
+    await post({ text: `שלום${x.name ? ' ' + x.name : ''}! 👋\nכאן מעקב הטיסות ✈️ — החשבון שלך אושר.\n\nכדי שההתראות יגיעו אליך:\n1. שומרים באנשי הקשר את המספר של המערכת: ${SYSNUM} (אפשר ללחוץ על כרטיס איש הקשר שמתחת)\n2. שולחים כאן "שלום"\n\nאם לא נרשמת — אפשר להתעלם מההודעה.` });
+    await new Promise((r) => setTimeout(r, 6000));
+    await post({ document: VCF, filename: 'מעקב טיסות.vcf', text: '📇 לוחצים כאן כדי לשמור את מעקב הטיסות באנשי הקשר' });
+    console.log('הודעת פתיחה נשלחה למשתמש שאושר');
+    await new Promise((r) => setTimeout(r, 6000));
+  }
+}
 async function sendNotes(notes) {
   for (const owner of [...new Set(notes.map((n) => n.owner))]) {
     const target = owner == null ? adminId() : owner;
@@ -376,6 +395,7 @@ function saveChannelStatus() {
       if (USERS) for (const [id, u] of Object.entries(USERS)) { const t = (u.settings || {}).testAt; if (t && t !== td[id]) { td[id] = t; dirty = true;
         await sendTo(id, statusMessage(allWatches.filter((w) => w.owner === id), merged0, '✅ בדיקה: מעקב הטיסות מחובר ועובד. ככה נראים הטיולים שלך עכשיו:', ownerName(id))); } }
       if (dirty) wr('data/state-quick.json', sq);
+      await sendIntros(); // משתמש שאושר עכשיו — הודעת פתיחה תוך דקה
       // 2) טיולים חדשים — בדיקה נפרדת לכל משתמש (כל אחד מקבל את התוצאה שלו בלי לחכות לאחרים)
       const owners = [...new Set(watches.map((w) => w.owner || '-'))];
       console.log(`בדיקה מהירה: ${watches.length} טיולים חדשים, ${owners.length} משתמשים`);
@@ -724,6 +744,7 @@ function saveChannelStatus() {
     if (!k) { sys.pend[p.id] = now.toISOString(); note(null, `👤 נרשם משתמש חדש וממתין לאישור שלך:\n${p.email}${p.name ? ` (${p.name})` : ''}\nלאישור: באתר ← "🛠️ משתמשים" ← ✅ אישור.${process.env.PAGE_URL ? '\n' + process.env.PAGE_URL : ''}`); }
   }
   await sendNotes(notes);
+  if (!QUICK) await sendIntros();
   // "שלח הודעת בדיקה" מהאתר — לכל משתמש לפי הבקשה שלו
   const tested = new Set(alerts.map((x) => x.w.owner || null));
   const statusTo = async (owner) => { if (tested.has(owner)) return; tested.add(owner);
