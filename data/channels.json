@@ -1,1 +1,1 @@
-{"telegram":{"configured":true,"last":{"ok":true,"msg":"טלגרם: נשלח","t":"2026-11-15T06:46:14.318Z"}},"whatsapp":{"configured":true,"last":{"ok":false,"msg":"וואטסאפ: שגיאה 403 \n<p><b>ERROR: There is currently a limit of 1 messages per 5 seconds to prevent ","t":"2026-11-16T06:28:29.118Z"}},"email":{"configured":false,"last":null}}
+{"telegram":{"configured":true,"last":{"ok":true,"msg":"טלגרם: נשלח","t":"2026-11-15T06:46:14.318Z"}},"whatsapp":{"configured":true,"last":{"ok":true,"msg":"וואטסאפ: נשלח","t":"2026-11-17T06:42:31.094Z"}},"email":{"configured":false,"last":null}}
