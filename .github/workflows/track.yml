@@ -17,6 +17,7 @@ permissions:
 concurrency: { group: scan, cancel-in-progress: false }
 jobs:
   scan:
+    if: false  # עצור (נגמר תקציב GitHub Actions) — למחוק את השורה הזאת כדי להפעיל מחדש
     runs-on: ubuntu-latest
     timeout-minutes: 350
     steps:
