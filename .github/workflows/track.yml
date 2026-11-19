@@ -2,8 +2,9 @@ name: מעקב מחירים
 # ריצה אחת נמשכת כ-5.5 שעות ובודקת כל חצי שעה, ובסוף מפעילה את עצמה מחדש.
 # (ההרצות המתוזמנות של GitHub לא אמינות — הן רק גיבוי, למקרה שהשרשרת נעצרה.)
 on:
-  schedule:
-    - cron: "7 */2 * * *"
+  # עצור (נגמר תקציב GitHub Actions). להפעלה מחדש: להחזיר את שתי השורות:
+  # schedule:
+  #   - cron: "7 */2 * * *"
   workflow_dispatch:
     inputs:
       test_notify:
@@ -72,4 +73,4 @@ jobs:
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run track.yml --ref main
+        run: echo "השרשרת עצורה"  # היה: run: gh workflow run track.yml --ref main

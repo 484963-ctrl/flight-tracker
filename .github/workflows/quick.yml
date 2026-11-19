@@ -3,8 +3,9 @@ name: בדיקה מהירה (טיול חדש)
 # ואז בודק מיד רק את הטיול החדש — בנפרד לכל משתמש — ושולח לו את התוצאה.
 # כותב רק ל-data/quick.json ול-data/state-quick.json (הבדיקה הרגילה ממזגת אותם).
 on:
-  schedule:
-    - cron: "37 */2 * * *"
+  # עצור (נגמר תקציב GitHub Actions). להפעלה מחדש: להחזיר את שתי השורות:
+  # schedule:
+  #   - cron: "37 */2 * * *"
   workflow_dispatch:
 permissions:
   contents: write
@@ -61,4 +62,4 @@ jobs:
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run quick.yml --ref main
+        run: echo "השרשרת עצורה"  # היה: run: gh workflow run quick.yml --ref main
